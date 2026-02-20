@@ -93,7 +93,21 @@ If validation fails, check `C:\Windows\setupact.log` inside the guest. See xref:
 
 == Step 3: Convert Gen 1 → Gen 2
 
-Run from the cluster node after the guest VM is shut down. This backs up the VHDXs, removes the Gen 1 VM, recreates it as Gen 2, re-adds it to the failover cluster, and re-registers it with Azure Arc.
+Run from the cluster node after the guest VM is shut down.
+
+NOTE: This step *deletes* the Gen 1 Hyper-V VM object entirely and creates a brand new Gen 2 VM object in its place. The existing VHDX disk files are preserved and reattached — your workload data is not touched — but the VM configuration itself is destroyed and rebuilt. This is why a VHDX backup is taken first and why this operation is irreversible without that backup.
+
+Specifically, the script:
+
+. Captures all settings (CPU, memory, NIC, VLAN, disk paths) from the running Gen 1 VM config
+. Backs up the VHDX files to `WorkingDirectory\Backups\`
+. Removes the existing Arc VM resource from Azure (if present)
+. Deletes the Gen 1 VM from Hyper-V (`Remove-VM`) — the VM config is gone at this point
+. Creates a new Gen 2 VM (`New-VM -Generation 2`) with the same name
+. Reattaches the original VHDX files to the new VM
+. Reapplies all captured settings (CPU, memory, NICs, Secure Boot, etc.)
+. Re-adds the VM to the failover cluster
+. Re-projects the VM as an Arc-managed resource in Azure
 
 [source,powershell]
 ----
