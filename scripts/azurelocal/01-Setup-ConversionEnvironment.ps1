@@ -234,10 +234,10 @@ Write-Log "Checking for Arc-enabled VM resources in Azure..."
 
 try {
     # Query for Arc-enabled HCI VMs
-    $arcVMs = Get-AzResource -ResourceGroupName $ResourceGroup -ResourceType "Microsoft.HybridCompute/machines" -ErrorAction SilentlyContinue
+    $arcVMs = Get-AzResource -ResourceGroupName $ResourceGroup -ResourceType "Microsoft.AzureStackHCI/virtualMachineInstances" -ErrorAction SilentlyContinue
 
     if ($arcVMs) {
-        Write-Log "  Found $($arcVMs.Count) Arc-enabled resources" -Level "SUCCESS"
+        Write-Log "  Found $($arcVMs.Count) Azure Local VM resources" -Level "SUCCESS"
 
         # Cross-reference with Gen 1 inventory
         $arcLookup = @{}

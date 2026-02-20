@@ -32,17 +32,6 @@
 .PARAMETER SubscriptionId
     Azure subscription ID.
 
-.PARAMETER CustomLocationId
-    Azure Local custom location resource ID for Arc VM creation.
-    Example: /subscriptions/{sub}/resourceGroups/{rg}/providers/Microsoft.ExtendedLocation/customLocations/{name}
-
-.PARAMETER LogicalNetworkId
-    Azure Local logical network resource ID for the VM NIC.
-    Example: /subscriptions/{sub}/resourceGroups/{rg}/providers/Microsoft.AzureStackHCI/logicalNetworks/{name}
-
-.PARAMETER SkipArcRegistration
-    Skip the Azure Arc re-registration step (useful for testing).
-
 .PARAMETER BackupVHDX
     Create a backup copy of VHDX files before conversion. Default: $true
 
@@ -51,9 +40,7 @@
         -VMName "WebServer01" `
         -WorkingDirectory "C:\ClusterStorage\Volume01\Gen2Conversion" `
         -ResourceGroup "rg-azurelocal-prod" `
-        -SubscriptionId "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx" `
-        -CustomLocationId "/subscriptions/.../customLocations/myAzureLocal" `
-        -LogicalNetworkId "/subscriptions/.../logicalNetworks/mgmt-lnet"
+        -SubscriptionId "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
 #>
 
 [CmdletBinding(SupportsShouldProcess = $true, ConfirmImpact = 'High')]
@@ -69,15 +56,6 @@ param(
 
     [Parameter(Mandatory = $true)]
     [string]$SubscriptionId,
-
-    [Parameter(Mandatory = $true)]
-    [string]$CustomLocationId,
-
-    [Parameter(Mandatory = $true)]
-    [string]$LogicalNetworkId,
-
-    [Parameter()]
-    [switch]$SkipArcRegistration,
 
     [Parameter()]
     [bool]$BackupVHDX = $true
@@ -254,55 +232,9 @@ if ($BackupVHDX) {
     }
 }
 
-# ── Step 4: Save Arc VM Resource Info (Before Deletion) ─────────────────────
+# ── Step 4: Remove Gen 1 VM (Preserve Disks) ────────────────────────────────
 Write-Log ""
-Write-Log "Step 4: Capturing Azure Arc VM resource information..."
-
-$arcResourceId = $null
-$arcVMTags = @{}
-
-try {
-    Connect-AzAccount -SubscriptionId $SubscriptionId -ErrorAction SilentlyContinue | Out-Null
-    Set-AzContext -SubscriptionId $SubscriptionId -ErrorAction SilentlyContinue | Out-Null
-
-    # Look for the Arc-enabled VM resource
-    # Azure Local VMs are typically Microsoft.AzureStackHCI/virtualMachineInstances
-    # or Microsoft.HybridCompute/machines depending on version
-    $arcResources = Get-AzResource -ResourceGroupName $ResourceGroup -ErrorAction SilentlyContinue |
-        Where-Object { $_.Name -like "*$VMName*" -or $_.Name -eq $VMName }
-
-    foreach ($res in $arcResources) {
-        Write-Log "  Found Arc resource: $($res.Name) | Type: $($res.ResourceType) | ID: $($res.ResourceId)"
-        if ($res.ResourceType -match "virtualMachine|HybridCompute") {
-            $arcResourceId = $res.ResourceId
-            $arcVMTags = $res.Tags
-        }
-    }
-
-    if ($arcResourceId) {
-        Write-Log "  Arc Resource ID: $arcResourceId" -Level "SUCCESS"
-        # Save for later re-registration
-        $arcInfo = @{
-            ResourceId   = $arcResourceId
-            Tags         = $arcVMTags
-            VMName       = $VMName
-            CapturedAt   = (Get-Date).ToString("o")
-        }
-        $arcInfoPath = Join-Path $WorkingDirectory "Configs\${VMName}_arc_info.json"
-        $arcInfo | ConvertTo-Json -Depth 3 | Out-File -FilePath $arcInfoPath -Encoding UTF8
-        Write-Log "  Arc info saved: $arcInfoPath"
-    }
-    else {
-        Write-Log "  No Arc VM resource found for '$VMName'" -Level "WARN"
-    }
-}
-catch {
-    Write-Log "  Could not query Arc resources: $_" -Level "WARN"
-}
-
-# ── Step 5: Remove Gen 1 VM (Preserve Disks) ────────────────────────────────
-Write-Log ""
-Write-Log "Step 5: Removing Gen 1 VM..."
+Write-Log "Step 4: Removing Gen 1 VM..."
 
 if (-not $PSCmdlet.ShouldProcess($VMName, "Remove Gen 1 VM (disks will be preserved)")) {
     throw "User cancelled VM removal."
@@ -321,19 +253,6 @@ if ($clusterGroup) {
     Start-Sleep -Seconds 3
 }
 
-# Delete the Arc resource if it exists (so we can cleanly re-register)
-if ($arcResourceId -and -not $SkipArcRegistration) {
-    Write-Log "  Deleting existing Arc VM resource..."
-    try {
-        Remove-AzResource -ResourceId $arcResourceId -Force -ErrorAction SilentlyContinue
-        Write-Log "  Arc resource deleted" -Level "SUCCESS"
-        Start-Sleep -Seconds 5
-    }
-    catch {
-        Write-Log "  Could not delete Arc resource: $_ (may need manual cleanup)" -Level "WARN"
-    }
-}
-
 # Remove VM (without deleting VHDXs)
 Write-Log "  Removing Hyper-V VM '$VMName' (preserving VHDXs)..."
 Remove-VM -Name $VMName -Force
@@ -341,9 +260,9 @@ Write-Log "  Gen 1 VM removed" -Level "SUCCESS"
 
 Start-Sleep -Seconds 3
 
-# ── Step 6: Create Gen 2 VM ─────────────────────────────────────────────────
+# ── Step 5: Create Gen 2 VM ─────────────────────────────────────────────────
 Write-Log ""
-Write-Log "Step 6: Creating Gen 2 VM..."
+Write-Log "Step 5: Creating Gen 2 VM..."
 
 # Determine VM path (use same location as original)
 $vmPath = Split-Path (Split-Path $bootDiskPath -Parent) -Parent
@@ -364,9 +283,9 @@ $newVMParams.GetEnumerator() | ForEach-Object { Write-Log "    $($_.Key): $($_.V
 $newVM = New-VM @newVMParams
 Write-Log "  Gen 2 VM created" -Level "SUCCESS"
 
-# ── Step 7: Configure VM Settings ───────────────────────────────────────────
+# ── Step 6: Configure VM Settings ───────────────────────────────────────────
 Write-Log ""
-Write-Log "Step 7: Applying VM configuration..."
+Write-Log "Step 6: Applying VM configuration..."
 
 # Processor
 Set-VMProcessor -VM $newVM -Count $processorCount
@@ -476,9 +395,9 @@ catch {
 
 Write-Log "  VM configuration applied" -Level "SUCCESS"
 
-# ── Step 8: Add to Failover Cluster ─────────────────────────────────────────
+# ── Step 7: Add to Failover Cluster ─────────────────────────────────────────
 Write-Log ""
-Write-Log "Step 8: Adding VM to failover cluster..."
+Write-Log "Step 7: Adding VM to failover cluster..."
 
 try {
     Add-ClusterVirtualMachineRole -VMName $VMName
@@ -489,9 +408,9 @@ catch {
     Write-Log "  You may need to add manually: Add-ClusterVirtualMachineRole -VMName '$VMName'" -Level "WARN"
 }
 
-# ── Step 9: Start VM and Validate Boot ──────────────────────────────────────
+# ── Step 8: Start VM and Validate Boot ──────────────────────────────────────
 Write-Log ""
-Write-Log "Step 9: Starting Gen 2 VM..."
+Write-Log "Step 8: Starting Gen 2 VM..."
 
 try {
     Start-VM -Name $VMName
@@ -531,117 +450,27 @@ catch {
     Write-Log "  Failed to start VM: $_" -Level "ERROR"
 }
 
-# ── Step 10: Re-Register as Azure Arc VM ─────────────────────────────────────
+# ── Step 9: Project into Azure Local Management Plane (Script 05) ────────────
 Write-Log ""
-Write-Log "Step 10: Re-registering VM with Azure Arc on Azure Local..."
-
-if ($SkipArcRegistration) {
-    Write-Log "  Arc registration SKIPPED (-SkipArcRegistration specified)" -Level "WARN"
-}
-else {
-    try {
-        # Ensure Az context
-        $context = Get-AzContext
-        if (-not $context -or $context.Subscription.Id -ne $SubscriptionId) {
-            Connect-AzAccount -SubscriptionId $SubscriptionId | Out-Null
-        }
-
-        # Get the VM's current VHDX path for the image reference
-        $currentVM = Get-VM -Name $VMName
-        $currentBootDisk = ($currentVM | Get-VMHardDiskDrive | Where-Object {
-            $_.ControllerType -eq "SCSI" -and $_.ControllerNumber -eq 0 -and $_.ControllerLocation -eq 0
-        }).Path
-
-        Write-Log "  Creating Arc-enabled VM resource..."
-
-        # Method 1: Use az CLI (Azure Local Arc VM management)
-        # This is the most reliable method for Azure Local 23H2+
-        $arcVMCreateCmd = @"
-az stack-hci-vm create ``
-    --name "$VMName" ``
-    --resource-group "$ResourceGroup" ``
-    --subscription "$SubscriptionId" ``
-    --custom-location "$CustomLocationId" ``
-    --admin-username "arcadmin" ``
-    --computer-name "$VMName" ``
-    --enable-vm-config-agent true ``
-    --hardware-profile memory-mb=$([math]::Round($memoryStartup / 1MB)) processors=$processorCount vm-size="Custom" ``
-    --storage-profile os-disk-name="$($VMName)_osdisk" ``
-    --nic-id "$LogicalNetworkId"
-"@
-
-        Write-Log "  NOTE: For Azure Local 23H2+, the VM should auto-register with Arc"
-        Write-Log "  once the VM Config Agent detects the new Gen 2 VM."
-        Write-Log ""
-        Write-Log "  If auto-registration doesn't occur within 10 minutes, use:"
-        Write-Log "  $arcVMCreateCmd"
-        Write-Log ""
-
-        # For Azure Local 23H2+ with MOC, VMs auto-register when:
-        # 1. The cluster is Arc-enabled
-        # 2. The VM Config Agent is running
-        # 3. The VM is clustered
-
-        # Wait for auto-registration
-        Write-Log "  Waiting for Arc auto-registration (checking every 30s for up to 10 minutes)..."
-        $arcTimeout = 600
-        $arcElapsed = 0
-        $arcRegistered = $false
-
-        while ($arcElapsed -lt $arcTimeout) {
-            Start-Sleep -Seconds 30
-            $arcElapsed += 30
-
-            $arcCheck = Get-AzResource -ResourceGroupName $ResourceGroup -ErrorAction SilentlyContinue |
-                Where-Object { $_.Name -eq $VMName -and $_.ResourceType -match "virtualMachine" }
-
-            if ($arcCheck) {
-                $arcRegistered = $true
-                Write-Log "  Arc VM registered: $($arcCheck.ResourceId)" -Level "SUCCESS"
-                break
-            }
-
-            Write-Log "    Checking... ($arcElapsed seconds)"
-        }
-
-        if (-not $arcRegistered) {
-            Write-Log "  Arc auto-registration did not complete within timeout." -Level "WARN"
-            Write-Log "  This is not uncommon — registration may take longer or require manual steps." -Level "WARN"
-            Write-Log ""
-            Write-Log "  ── Manual Registration Options ──" -Level "WARN"
-            Write-Log "  Option A: Wait longer — Arc agent may still be syncing" -Level "WARN"
-            Write-Log "  Option B: Restart the Arc agent on the cluster node:" -Level "WARN"
-            Write-Log "    Restart-Service HostAgentService" -Level "WARN"
-            Write-Log "  Option C: Use az CLI to manually create the Arc VM resource:" -Level "WARN"
-            Write-Log "    $arcVMCreateCmd" -Level "WARN"
-        }
-
-        # Re-apply tags if we had them
-        if ($arcRegistered -and $arcVMTags -and $arcVMTags.Count -gt 0) {
-            try {
-                $newArcResource = Get-AzResource -ResourceGroupName $ResourceGroup |
-                    Where-Object { $_.Name -eq $VMName -and $_.ResourceType -match "virtualMachine" } |
-                    Select-Object -First 1
-
-                if ($newArcResource) {
-                    Set-AzResource -ResourceId $newArcResource.ResourceId -Tag $arcVMTags -Force
-                    Write-Log "  Re-applied Azure tags" -Level "SUCCESS"
-                }
-            }
-            catch {
-                Write-Log "  Could not re-apply tags: $_" -Level "WARN"
-            }
-        }
-    }
-    catch {
-        Write-Log "  Arc registration error: $_" -Level "ERROR"
-        Write-Log "  You may need to manually register the VM with Azure Arc." -Level "WARN"
-    }
-}
-
-# ── Step 11: Final Validation ────────────────────────────────────────────────
+Write-Log "Step 9: Azure Local portal projection — run Script 05 next"
 Write-Log ""
-Write-Log "Step 11: Final validation..."
+Write-Log "  '$VMName' is now a Gen 2 Hyper-V VM running on the cluster."
+Write-Log "  To make it visible and manageable in the Azure portal, run Script 05:"
+Write-Log ""
+Write-Log "    .\scripts\azurelocal\05-Reconnect-AzureLocalVM.ps1 ``"
+Write-Log "        -VMName '$VMName' ``"
+Write-Log "        -ResourceGroup '$ResourceGroup' ``"
+Write-Log "        -SubscriptionId '$SubscriptionId' ``"
+Write-Log "        -CustomLocationId '<your-custom-location-resource-id>' ``"
+Write-Log "        -LogicalNetworkId '<your-logical-network-resource-id>'"
+Write-Log ""
+Write-Log "  Script 05 calls 'az stack-hci-vm reconnect-to-azure' to project the" -Level "INFO"
+Write-Log "  existing Hyper-V VM into Azure as a virtualMachineInstances resource." -Level "INFO"
+Write-Log "  The VM workload, identity, and OS state are completely untouched." -Level "INFO"
+
+# ── Step 10: Final Validation ────────────────────────────────────────────────
+Write-Log ""
+Write-Log "Step 10: Final validation..."
 
 $finalVM = Get-VM -Name $VMName
 Write-Log "  VM Name:        $($finalVM.Name)"
@@ -695,8 +524,8 @@ Write-Log "  [ ] Verify VM boots and OS is functional"
 Write-Log "  [ ] Confirm BIOS Mode shows 'UEFI' (msinfo32 inside guest)"
 Write-Log "  [ ] Verify disk shows as GPT in guest Disk Management"
 Write-Log "  [ ] Test application functionality"
-Write-Log "  [ ] Confirm Azure Arc registration in Azure Portal"
-Write-Log "  [ ] Verify VM appears in Azure Local portal blade"
-Write-Log "  [ ] Enable Azure policies/extensions as needed"
+Write-Log "  [ ] Run 05-Reconnect-AzureLocalVM.ps1 to project VM into Azure portal"
+Write-Log "  [ ] Verify VM appears in Azure Local portal blade (after Script 05)"
+Write-Log "  [ ] Enable Azure policies/extensions as needed (after Script 05)"
 Write-Log "  [ ] Remove VHDX backups when satisfied"
 Write-Log "═══════════════════════════════════════════════════════════════"

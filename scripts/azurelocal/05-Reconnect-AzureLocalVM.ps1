@@ -49,7 +49,7 @@
     Optional. Path to the working directory from script 01. Used for logging only.
 
 .EXAMPLE
-    .\scripts\cluster\05-Reconnect-AzureLocalVM.ps1 `
+    .\scripts\azurelocal\05-Reconnect-AzureLocalVM.ps1 `
         -VMName "WebServer01" `
         -ResourceGroup "rg-azurelocal-prod" `
         -SubscriptionId "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx" `
