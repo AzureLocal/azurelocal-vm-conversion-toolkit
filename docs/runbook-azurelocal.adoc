@@ -1,0 +1,262 @@
+= Runbook: Azure Local VM Path
+Azure Local Cloud | Hybrid Cloud Solutions
+:toc: left
+:toc-title: Contents
+:toclevels: 2
+
+NOTE: *This runbook covers the Azure Local VM path (scripts 01–02, 05–06).* The resulting VM is a full `Microsoft.AzureStackHCI/virtualMachineInstances` resource visible in the Azure portal and managed through the Azure Local management plane. If you only need a Gen 2 VM managed through Hyper-V directly, see xref:runbook-hyperv.adoc[Runbook: Hyper-V Cluster Path].
+
+WARNING: *This path is NOT workload-preserving.* Creating a proper Azure Local VM resource requires the source VHDX to be sysprepped (generalized). Sysprep destroys the machine identity — the computer account, SID, installed application state, and all machine-specific configuration are lost. You will need to re-join the domain, re-install applications, and restore data after provisioning the new VM. Plan your migration window accordingly.
+
+WARNING: Ensure all prerequisites are satisfied before you begin. See xref:prerequisites.adoc[Prerequisites].
+
+'''
+
+== What You Are Actually Doing
+
+It is important to understand what this path does — and what it does not do.
+
+|===
+| What it IS | What it is NOT
+
+| A new VM deployment from a sysprepped (generalized) VHDX image
+| A workload-preserving in-place conversion
+
+| A `Microsoft.AzureStackHCI/virtualMachineInstances` resource visible and manageable in the Azure portal
+| A migration of a running system's identity and state
+
+| A Gen 2 VM with vTPM, UEFI, and Secure Boot
+| A simple rename or reconfigure of the existing VM
+|===
+
+The original VHDX disk contents (your data) can be preserved in a separate data disk. The OS disk must be sysprepped and re-deployed from the generalized image.
+
+'''
+
+== Workflow Overview
+
+....
+  ┌──────────────────────────────────────────────────┐
+  │  01 - Setup Environment                          │
+  │  Run on: Cluster node                            │
+  │  Inventories Gen 1 VMs, exports configs          │
+  └────────────────────┬─────────────────────────────┘
+                       │
+                       ▼
+  ┌──────────────────────────────────────────────────┐
+  │  02 - Convert MBR → GPT                          │
+  │  Run on: Inside each guest VM                    │
+  │  Converts boot disk partition table              │
+  │                                                  │
+  │  ⚠️  SHUT DOWN the VM after this step!            │
+  │     Do NOT reboot — it won't boot as Gen 1.      │
+  └────────────────────┬─────────────────────────────┘
+                       │
+                       ▼
+  ┌──────────────────────────────────────────────────┐
+  │  05 - Sysprep / Prepare Image                    │
+  │  Run on: Inside the guest VM                     │
+  │  Generalizes the OS disk for deployment          │
+  │                                                  │
+  │  ⚠️  IDENTITY DESTRUCTIVE — machine SID,         │
+  │     computer account, app state lost             │
+  └────────────────────┬─────────────────────────────┘
+                       │
+                       ▼
+  ┌──────────────────────────────────────────────────┐
+  │  06 - Create Azure Local VM                      │
+  │  Run on: Cluster node (or management workstation)│
+  │  Registers VHDX as image, creates NIC resource, │
+  │  deploys as Azure Local VM via az stack-hci-vm   │
+  └──────────────────────────────────────────────────┘
+....
+
+'''
+
+== Step 1: Setup the Environment
+
+Run once per cluster before starting any conversions. This validates cluster health, checks Azure connectivity, inventories all Gen 1 VMs, and exports their configurations to the working directory.
+
+[source,powershell]
+----
+.\scripts\cluster\01-Setup-ConversionEnvironment.ps1 `
+    -ClusterName "MyHCICluster" `
+    -WorkingDirectory "C:\ClusterStorage\Volume01\Gen2Conversion" `
+    -SubscriptionId "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx" `
+    -ResourceGroup "rg-azurelocal-prod"
+----
+
+This creates the working directory structure and exports a `Gen1_VM_Inventory_YYYYMMDD.csv` plus a `_config.json` for each VM.
+
+'''
+
+== Step 2: Convert MBR → GPT (Inside the Guest VM)
+
+This step must be performed *inside each guest VM* before sysprep.
+
+Copy `scripts/guest/02-Convert-MBRtoGPT.ps1` into the guest VM and run it:
+
+[source,powershell]
+----
+# Validate first (dry run — no changes made)
+.\02-Convert-MBRtoGPT.ps1 -ValidateOnly
+
+# Perform the conversion
+.\02-Convert-MBRtoGPT.ps1
+----
+
+CAUTION: Do *NOT* reboot after this step. Proceed directly to Step 3 (Sysprep). If validation fails, see xref:troubleshooting.adoc#mbr2gpt-fails-validation[mbr2gpt fails validation].
+
+'''
+
+== Step 3: Sysprep — Prepare the Image (Inside the Guest VM)
+
+[WARNING]
+====
+*This is a one-way operation.* Sysprep removes the machine SID, empties the computer account credentials, removes any machine-bound application licenses, and shuts the VM down. You cannot undo this without restoring from a backup.
+
+Before running, ensure you have:
+
+* [ ] Noted the current computer name
+* [ ] Noted all domain join information (domain, OU path, service accounts)
+* [ ] Documented installed applications and their license keys
+* [ ] Backed up any local data you intend to preserve (move to a separate data VHDX first)
+====
+
+Copy `scripts/guest/05-Sysprep-PrepareImage.ps1` into the guest VM and run it:
+
+[source,powershell]
+----
+# Dry run — validate only, no changes made
+.\05-Sysprep-PrepareImage.ps1 -ValidateOnly
+
+# Perform sysprep (will shut down the VM when complete)
+.\05-Sysprep-PrepareImage.ps1
+----
+
+The VM will shut down automatically when Sysprep completes. Do not start it again — the VHDX is now a generalized image and booting it before registering it in Azure Local will break the generalization.
+
+If Sysprep fails, check `C:\Windows\System32\Sysprep\Panther\setupact.log` inside the guest for details.
+
+'''
+
+== Step 4: Create the Azure Local VM
+
+Run from the cluster node or any management workstation with the Azure CLI and the `stack-hci-vm` extension installed.
+
+=== 4a: Register the VHDX as an Azure Local Image Resource
+
+[source,powershell]
+----
+.\scripts\cluster\06-Create-AzureLocalVM.ps1 `
+    -VMName "WebServer01" `
+    -WorkingDirectory "C:\ClusterStorage\Volume01\Gen2Conversion" `
+    -SubscriptionId "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx" `
+    -ResourceGroup "rg-azurelocal-prod" `
+    -CustomLocationId "/subscriptions/.../customLocations/myAzureLocal" `
+    -LogicalNetworkId "/subscriptions/.../logicalNetworks/mgmt-lnet" `
+    -StoragePathId "/subscriptions/.../storageContainers/myStoragePath" `
+    -VHDXSourcePath "C:\ClusterStorage\Volume01\Gen2Conversion\Backups\WebServer01\WebServer01_OS.vhdx"
+----
+
+Internally, the script performs these operations in sequence:
+
+. Registers the VHDX as an `Microsoft.AzureStackHCI/galleryImages` resource:
++
+[source,powershell]
+----
+az stack-hci-vm image create `
+    --name "img-WebServer01-gen2" `
+    --resource-group "rg-azurelocal-prod" `
+    --custom-location $CustomLocationId `
+    --os-type "Windows" `
+    --image-path "C:\ClusterStorage\...\WebServer01_OS.vhdx" `
+    --storage-path-id $StoragePathId
+----
+
+. Creates a NIC resource:
++
+[source,powershell]
+----
+az stack-hci-vm network nic create `
+    --name "nic-WebServer01" `
+    --resource-group "rg-azurelocal-prod" `
+    --custom-location $CustomLocationId `
+    --subnet-id $LogicalNetworkId
+----
+
+. Deploys the VM:
++
+[source,powershell]
+----
+az stack-hci-vm create `
+    --name "WebServer01" `
+    --resource-group "rg-azurelocal-prod" `
+    --custom-location $CustomLocationId `
+    --image "img-WebServer01-gen2" `
+    --nics "nic-WebServer01" `
+    --storage-path-id $StoragePathId `
+    --admin-username "localadmin"
+----
+
+=== 4b: Verify the VM in the Azure Portal
+
+After deployment completes, verify the VM appears in the Azure portal under *Azure Local > Virtual Machines* and has `Microsoft.AzureStackHCI/virtualMachineInstances` as its resource type.
+
+'''
+
+== Step 5: Post-Deployment Tasks
+
+Because Sysprep generalized the OS, the following must be completed on first boot:
+
+. *OOBE / Specialize pass* — Windows will run through a mini-setup. Provide local admin credentials when prompted.
+. *Rename the computer* — restore the original or intended machine name:
++
+[source,powershell]
+----
+Rename-Computer -NewName "WebServer01" -Restart
+----
+
+. *Re-join the domain*:
++
+[source,powershell]
+----
+Add-Computer -DomainName "contoso.local" `
+    -OUPath "OU=Servers,DC=contoso,DC=local" `
+    -Credential (Get-Credential) `
+    -Restart
+----
+
+. *Re-install applications* — any applications that bound themselves to the original machine SID (such as domain-joined SQL Server instances, certificate-bound services, or software with hardware-locked licensing) must be reinstalled or reactivated.
+
+. *Restore data* — if data was moved to a separate data VHDX before sysprep, attach that disk to the new VM and move data back to the appropriate location.
+
+. *Update DNS / load balancer entries* — if the old VM had a static IP or DNS A record, update these to point to the new VM's IP.
+
+'''
+
+== Finding Your Azure Resource IDs
+
+[source,powershell]
+----
+# Custom Location ID
+az customlocation list --resource-group "rg-azurelocal-prod" --query "[].id" -o tsv
+
+# Logical Network ID
+az stack-hci-vm network lnet list --resource-group "rg-azurelocal-prod" --query "[].id" -o tsv
+
+# Storage Path ID
+az stack-hci-vm storagepath list --resource-group "rg-azurelocal-prod" --query "[].id" -o tsv
+
+# Subscription ID
+az account show --query id -o tsv
+----
+
+'''
+
+== Important Notes
+
+* *Downtime*: Begins when Sysprep shuts down the VM. Expect several hours to complete all post-deployment tasks. Plan for a full maintenance window.
+* *No rollback after Sysprep*: Once Sysprep completes, the only recovery path is restoring from a pre-sysprep VHDX backup. Ensure backups were taken (script 01 does this).
+* *Data disks*: Additional data VHDXs can be attached to the new Azure Local VM using `az stack-hci-vm disk attach` without going through sysprep. Only the OS disk must be generalized.
+* *Arc-managed automatically*: The new VM is Arc-projected by the Azure Local platform via the Arc resource bridge. You do not install the Connected Machine agent manually.

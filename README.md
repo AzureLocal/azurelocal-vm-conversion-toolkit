@@ -16,13 +16,21 @@ PowerShell toolkit for converting Hyper-V Gen 1 VMs to Gen 2 on Azure Local whil
 
 ## What This Does
 
-There is no in-place upgrade path from Hyper-V Gen 1 to Gen 2. This toolkit automates the manual process of converting VMs by:
+There is no in-place upgrade path from Hyper-V Gen 1 to Gen 2. This toolkit automates the manual process and supports two distinct conversion paths:
 
-1. Inventorying Gen 1 VMs and exporting their full configurations
-2. Converting boot disks from MBR to GPT inside the guest OS
-3. Recreating each VM as Gen 2 with identical settings (CPU, memory, NICs, VLANs, disks)
-4. Re-adding VMs to the failover cluster
-5. Re-registering VMs with Azure Arc so they remain managed through the Azure portal
+**Path 1 — Hyper-V Cluster (workload-preserving)**
+1. Inventories Gen 1 VMs and exports their full configurations
+2. Converts boot disks from MBR to GPT inside the guest OS
+3. Recreates each VM as a Gen 2 Hyper-V VM with identical settings (CPU, memory, NICs, VLANs, disks)
+4. Re-adds VMs to the failover cluster and re-registers with Azure Arc
+
+**Path 2 — Azure Local VM (portal-managed)**
+1. Same inventory and MBR→GPT steps as Path 1
+2. Syspreps (generalizes) the guest OS — identity-destructive; machine SID and domain join are lost
+3. Registers the sysprepped VHDX as an Azure Local image resource
+4. Deploys a new `Microsoft.AzureStackHCI/virtualMachineInstances` resource via `az stack-hci-vm create`
+
+See **[docs/gen1-vs-gen2.adoc](docs/gen1-vs-gen2.adoc)** to choose the right path before running anything.
 
 ## Should You Actually Convert?
 
@@ -46,19 +54,31 @@ See [docs/prerequisites.adoc](docs/prerequisites.adoc) for full details and setu
 
 ## Scripts
 
+### Path 1 — Hyper-V Cluster (workload-preserving, scripts 01–04)
+
 | Script | Runs On | Purpose |
-|--------|---------|---------|
+|--------|---------|--------|
 | [`scripts/cluster/01-Setup-ConversionEnvironment.ps1`](scripts/cluster/01-Setup-ConversionEnvironment.ps1) | Azure Local cluster node | Validates cluster health, Azure connectivity, inventories all Gen 1 VMs, exports configs |
 | [`scripts/guest/02-Convert-MBRtoGPT.ps1`](scripts/guest/02-Convert-MBRtoGPT.ps1) | Inside each guest VM | Validates OS compatibility and runs `mbr2gpt.exe` to convert the boot disk from MBR to GPT |
-| [`scripts/cluster/03-Convert-Gen1toGen2.ps1`](scripts/cluster/03-Convert-Gen1toGen2.ps1) | Azure Local cluster node | Removes Gen 1 VM, creates Gen 2 VM with same config, re-clusters, re-registers with Arc |
+| [`scripts/cluster/03-Convert-Gen1toGen2.ps1`](scripts/cluster/03-Convert-Gen1toGen2.ps1) | Azure Local cluster node | Removes Gen 1 VM, creates Gen 2 Hyper-V VM with same config, re-clusters, re-registers with Arc |
 | [`scripts/cluster/04-Batch-ConvertVMs.ps1`](scripts/cluster/04-Batch-ConvertVMs.ps1) | Azure Local cluster node | Orchestrates Script 03 across multiple VMs with pre-flight checks and reporting |
+
+### Path 2 — Azure Local VM (portal-managed, scripts 01–02 + 05–06)
+
+| Script | Runs On | Purpose |
+|--------|---------|--------|
+| [`scripts/cluster/01-Setup-ConversionEnvironment.ps1`](scripts/cluster/01-Setup-ConversionEnvironment.ps1) | Azure Local cluster node | Same as Path 1 — inventory and setup |
+| [`scripts/guest/02-Convert-MBRtoGPT.ps1`](scripts/guest/02-Convert-MBRtoGPT.ps1) | Inside each guest VM | Same as Path 1 — MBR to GPT conversion |
+| [`scripts/guest/05-Sysprep-PrepareImage.ps1`](scripts/guest/05-Sysprep-PrepareImage.ps1) | Inside each guest VM | Validates, then runs Sysprep `/generalize /oobe /shutdown` — **destructive, identity-destroying** |
+| [`scripts/cluster/06-Create-AzureLocalVM.ps1`](scripts/cluster/06-Create-AzureLocalVM.ps1) | Cluster node / mgmt workstation | Registers sysprepped VHDX as image resource, creates NIC, deploys Azure Local VM via `az stack-hci-vm create` |
 
 ## Documentation
 
 | Doc | Description |
 |-----|-------------|
-| [docs/gen1-vs-gen2.adoc](docs/gen1-vs-gen2.adoc) | **Start here** — Gen 1 vs Gen 2 decision guide, feature comparison, and conversion checklist |
-| [docs/runbook.adoc](docs/runbook.adoc) | Step-by-step runbook — workflow, commands, working directory structure |
+| [docs/gen1-vs-gen2.adoc](docs/gen1-vs-gen2.adoc) | **Start here** — Gen 1 vs Gen 2 decision guide, feature comparison, path selection, and checklist |
+| [docs/runbook-hyperv.adoc](docs/runbook-hyperv.adoc) | Runbook for Path 1 — Hyper-V Cluster (workload-preserving, scripts 01–04) |
+| [docs/runbook-azurelocal.adoc](docs/runbook-azurelocal.adoc) | Runbook for Path 2 — Azure Local VM (portal-managed, requires Sysprep, scripts 01–02 + 05–06) |
 | [docs/prerequisites.adoc](docs/prerequisites.adoc) | Full prerequisites, module setup, and Azure permission requirements |
 | [docs/troubleshooting.adoc](docs/troubleshooting.adoc) | Common issues and solutions, rollback instructions |
 

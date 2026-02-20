@@ -1,8 +1,10 @@
-= Runbook
+= Runbook: Hyper-V Cluster Path
 Azure Local Cloud | Hybrid Cloud Solutions
 :toc: left
 :toc-title: Contents
 :toclevels: 2
+
+NOTE: *This runbook covers the Hyper-V Cluster path (scripts 01–04).* It converts a Gen 1 VM into a Gen 2 Hyper-V VM on the same cluster node. The resulting VM is managed directly through Hyper-V and does not appear as an `Microsoft.AzureStackHCI/virtualMachineInstances` resource in the Azure portal. If you need a portal-managed Azure Local VM, see xref:runbook-azurelocal.adoc[Runbook: Azure Local VM Path].
 
 This guide walks through running the Azure Local VM Conversion Toolkit from start to finish.
 
