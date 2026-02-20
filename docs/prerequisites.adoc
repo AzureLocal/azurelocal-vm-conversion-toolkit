@@ -87,21 +87,29 @@ az extension list --query "[?name=='stack-hci-vm']"
 
 == Azure Permissions
 
-The account running the scripts needs the following Azure RBAC roles on the target resource group:
+On Azure Local, VMs are Arc-projected by the platform through the Azure Arc resource bridge — not through an in-guest Connected Machine agent. The `Azure Connected Machine Resource Administrator` role applies to traditional Arc-enabled servers and is *not* used here.
+
+The account running the scripts needs the following Azure Stack HCI roles on the target Azure Local instance or resource group:
 
 [cols="1,2", options="header"]
 |===
 | Role | Reason
 
-| *Contributor* (or scoped equivalents)
-| Create/delete Azure Arc machine resources
+| *Azure Stack HCI Administrator*
+| Required to register the system, create shared resources (logical networks, VM images, storage paths), and assign roles to other users. Use this role for the account running conversion scripts.
 
-| *Azure Connected Machine Resource Administrator*
-| Re-register Arc agents
+| *Azure Stack HCI VM Contributor*
+| Sufficient for creating, deleting, starting, and stopping VMs and their attached resources. Use this role for scoped service accounts that don't need cluster-level access.
 |===
+
+To verify or assign roles:
 
 [source,powershell]
 ----
+# In the Azure portal: go to your Azure Local resource
+# > Access control (IAM) > Role assignments
+# Assign 'Azure Stack HCI Administrator' to the account running the scripts
+
 # Verify current Azure login
 Connect-AzAccount
 Get-AzContext

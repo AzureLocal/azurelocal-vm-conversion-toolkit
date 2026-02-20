@@ -73,38 +73,32 @@ Get-Content C:\Windows\setupact.log | Select-String -Pattern "MBR2GPT" -Context 
 [#arc-registration]
 == Arc Registration Doesn't Happen Automatically
 
-*Symptom:* After Gen 2 conversion and VM boot, the VM doesn't appear in Azure portal as an Arc-enabled server within 10 minutes.
+*Symptom:* After Gen 2 conversion and VM boot, the VM doesn't appear in the Azure portal within 10 minutes.
 
-*Step 1:* Restart the VM Config Agent on the Azure Local host node:
+IMPORTANT: On Azure Local, VM Arc enrollment is managed entirely by the *platform* — specifically the Azure Arc resource bridge and the VM Config Agent running on the host node. There is no in-guest Connected Machine agent to re-register. You cannot re-register Arc from inside the guest VM.
+
+*Step 1:* Restart the VM Config Agent on the Azure Local *host node* (not inside the guest):
 
 [source,powershell]
 ----
 Restart-Service HostAgentService -Force
 ----
 
-*Step 2:* Check the agent logs:
+*Step 2:* Verify the Arc resource bridge is healthy in the Azure portal:
+
+* Navigate to your Azure Local resource → *Overview* → confirm *Azure Arc* shows as *Connected*
+* If the Arc resource bridge shows as degraded or disconnected, the VM cannot be Arc-projected until the bridge is restored
+
+*Step 3:* Check the VM Config Agent logs on the host node:
 
 [source,powershell]
 ----
 Get-EventLog -LogName Application -Source "Microsoft-AzureStack-HCI-GuestAgent" -Newest 20
 ----
 
-*Step 3:* Use the manual fallback command output by `03-Convert-Gen1toGen2.ps1` at the end of its run. It prints a full `az stack-hci-vm create` command you can re-run.
+*Step 4:* Use the manual fallback command output by `03-Convert-Gen1toGen2.ps1` at the end of its run. It prints a full `az stack-hci-vm create` command you can re-run to re-project the VM resource into Azure.
 
-*Step 4:* Verify the Arc agent inside the guest is running:
-
-[source,powershell]
-----
-# Inside the guest VM
-Get-Service himds
-----
-
-If stopped, start it:
-
-[source,powershell]
-----
-Start-Service himds
-----
+*Step 5:* If the VM still doesn't appear after 15 minutes with the resource bridge healthy, delete the stale Arc VM resource from Azure (if one exists) and re-run the `az stack-hci-vm create` fallback command.
 
 '''
 
