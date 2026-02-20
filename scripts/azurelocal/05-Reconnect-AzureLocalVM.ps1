@@ -5,7 +5,7 @@
     as a Microsoft.AzureStackHCI/virtualMachineInstances resource.
 
 .DESCRIPTION
-    This script is part of the Azure Local VM Conversion Toolkit — Path 2 (Azure Local VM).
+    This script is part of the Azure Local VM Conversion Toolkit — Path 1 (Azure Local VM).
     It is the final step after scripts 01, 02, and 03 have completed.
 
     At this point the VM is already running as a Gen 2 Hyper-V VM on the cluster.

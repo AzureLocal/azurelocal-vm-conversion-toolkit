@@ -29,14 +29,37 @@ Before running any conversion scripts, ensure the following requirements are met
 
 '''
 
-== PowerShell Modules (Cluster Node)
+== PowerShell Modules
 
-Install or verify these modules are present on the Azure Local node where you'll run the cluster-side scripts:
+=== Hyper-V Path (`scripts/hyperv/`)
+
+Only built-in Windows Server modules are required:
+
+[source,powershell]
+----
+# Verify both are available (they ship with Windows Server)
+Get-Module -ListAvailable Hyper-V, FailoverClusters
+----
+
+[cols="1,2", options="header"]
+|===
+| Module | Purpose
+
+| `Hyper-V`
+| VM management (built into Windows Server)
+
+| `FailoverClusters`
+| Cluster role management (built into Windows Server)
+|===
+
+=== Azure Local Path (`scripts/azurelocal/`)
+
+All of the above, plus the Az modules:
 
 [source,powershell]
 ----
 # Check installed modules
-Get-Module -ListAvailable Az.Accounts, Az.Resources, Az.StackHCI, Az.ConnectedMachine, Hyper-V, FailoverClusters
+Get-Module -ListAvailable Az.Accounts, Az.Resources, Az.StackHCI, Az.ConnectedMachine
 
 # Install Az modules if missing
 Install-Module -Name Az.Accounts, Az.Resources, Az.StackHCI, Az.ConnectedMachine -Scope CurrentUser -Force
@@ -57,22 +80,16 @@ Install-Module -Name Az.Accounts, Az.Resources, Az.StackHCI, Az.ConnectedMachine
 
 | `Az.ConnectedMachine`
 | Azure Arc connected machine management
-
-| `Hyper-V`
-| VM management (built into Windows Server)
-
-| `FailoverClusters`
-| Cluster role management (built into Windows Server)
 |===
 
 '''
 
-== Azure CLI (Cluster Node)
+== Azure CLI (Azure Local Path Only)
 
-Required for two purposes:
+Not required for `scripts/hyperv/`. Required for `scripts/azurelocal/` for two purposes:
 
-* *Path 1 and Path 2:* The manual Arc registration fallback logged by `03-Convert-Gen1toGen2.ps1` uses `az stack-hci-vm`
-* *Path 2 only:* `05-Reconnect-AzureLocalVM.ps1` requires Azure CLI with the `stack-hci-vm` extension to call `az stack-hci-vm reconnect-to-azure`
+* `03-Convert-Gen1toGen2.ps1` — logs a manual `az stack-hci-vm create` fallback command if Arc auto-registration times out
+* `05-Reconnect-AzureLocalVM.ps1` — calls `az stack-hci-vm reconnect-to-azure` to project the Gen 2 VM into the Azure portal
 
 [source,powershell]
 ----

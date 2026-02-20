@@ -18,10 +18,18 @@ assignees: ''
 
 ## Which script failed?
 
-- [ ] `scripts/cluster/01-Setup-ConversionEnvironment.ps1`
-- [ ] `scripts/guest/02-Convert-MBRtoGPT.ps1`
-- [ ] `scripts/cluster/03-Convert-Gen1toGen2.ps1`
-- [ ] `scripts/cluster/04-Batch-ConvertVMs.ps1`
+**Path 1 — Azure Local:**
+- [ ] `scripts/azurelocal/01-Setup-ConversionEnvironment.ps1`
+- [ ] `scripts/azurelocal/02-Convert-MBRtoGPT.ps1`
+- [ ] `scripts/azurelocal/03-Convert-Gen1toGen2.ps1`
+- [ ] `scripts/azurelocal/04-Batch-ConvertVMs.ps1`
+- [ ] `scripts/azurelocal/05-Reconnect-AzureLocalVM.ps1`
+
+**Path 2 — Hyper-V:**
+- [ ] `scripts/hyperv/01-Setup-ConversionEnvironment.ps1`
+- [ ] `scripts/hyperv/02-Convert-MBRtoGPT.ps1`
+- [ ] `scripts/hyperv/03-Convert-Gen1toGen2.ps1`
+- [ ] `scripts/hyperv/04-Batch-ConvertVMs.ps1`
 
 ## What happened?
 

@@ -85,7 +85,7 @@ Run once per cluster before starting any conversions. This validates cluster hea
 
 [source,powershell]
 ----
-.\scripts\cluster\01-Setup-ConversionEnvironment.ps1 `
+.\scripts\azurelocal\01-Setup-ConversionEnvironment.ps1 `
     -ClusterName "MyHCICluster" `
     -WorkingDirectory "C:\ClusterStorage\Volume01\Gen2Conversion" `
     -SubscriptionId "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx" `
@@ -100,7 +100,7 @@ This creates the working directory structure and exports a `Gen1_VM_Inventory_YY
 
 This step must be performed *inside each guest VM*. The boot disk must be GPT before the VM can boot under UEFI firmware (Gen 2).
 
-Copy `scripts/guest/02-Convert-MBRtoGPT.ps1` into the guest VM and run it:
+Copy `scripts/azurelocal/02-Convert-MBRtoGPT.ps1` into the guest VM and run it:
 
 [source,powershell]
 ----
@@ -130,7 +130,7 @@ NOTE: This step deletes the Gen 1 VM object and creates a new Gen 2 Hyper-V VM w
 
 [source,powershell]
 ----
-.\scripts\cluster\03-Convert-Gen1toGen2.ps1 `
+.\scripts\azurelocal\03-Convert-Gen1toGen2.ps1 `
     -VMName "WebServer01" `
     -WorkingDirectory "C:\ClusterStorage\Volume01\Gen2Conversion" `
     -ResourceGroup "rg-azurelocal-prod" `
@@ -149,7 +149,7 @@ This step projects the Gen 2 Hyper-V VM into Azure as a `Microsoft.AzureStackHCI
 
 [source,powershell]
 ----
-.\scripts\cluster\05-Reconnect-AzureLocalVM.ps1 `
+.\scripts\azurelocal\05-Reconnect-AzureLocalVM.ps1 `
     -VMName "WebServer01" `
     -ResourceGroup "rg-azurelocal-prod" `
     -SubscriptionId "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx" `

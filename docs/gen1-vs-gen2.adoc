@@ -159,67 +159,67 @@ If you have decided to proceed with conversion, there are two distinct paths dep
 
 [cols="1,1,1", options="header"]
 |===
-| Consideration | Path 1 — Hyper-V Cluster | Path 2 — Azure Local VM
+| Consideration | Path 1 — Azure Local VM | Path 2 — Hyper-V Cluster
 
 | *Scripts used*
-| 01, 02, 03 (or 04 for batch)
 | 01, 02, 03, 05
+| 01, 02, 03 (or 04 for batch)
 
 | *Result*
-| Hyper-V Gen 2 VM on the cluster node
 | `Microsoft.AzureStackHCI/virtualMachineInstances` resource
+| Hyper-V Gen 2 VM on the cluster node
 
 | *Visible in Azure portal*
-| Arc-registered VM (compute view only)
 | Fully managed Azure Local VM (VM blade, metrics, extensions)
+| Arc-registered VM (compute view only)
 
 | *Workload preserved?*
-| ✓ Yes — existing OS, apps, and domain join intact
 | ✓ Yes — no Sysprep, no identity loss
+| ✓ Yes — existing OS, apps, and domain join intact
 
 | *Machine SID / domain join*
 | ✓ Preserved
 | ✓ Preserved
 
 | *Downtime*
+| 5–15 minutes + VHDX backup time (reconnect step adds minimal time, no additional downtime)
 | 5–15 minutes + VHDX backup time
-| Same as Path 1 (reconnect step adds minimal time, no additional downtime)
 
 | *Rollback*
-| VHDX backup restore
 | VHDX backup restore; reconnect can be undone by deleting the Azure resource (Hyper-V VM is unaffected)
+| VHDX backup restore
 
 | *Management plane*
-| Hyper-V Manager / Failover Cluster Manager
 | Azure portal / Azure CLI / ARM
+| Hyper-V Manager / Failover Cluster Manager
 
 | *Arc projection*
-| Manual or via existing cluster Arc registration
 | Automatic via Arc resource bridge after `reconnect-to-azure`
+| Manual or via existing cluster Arc registration
 
 | *Key command*
-| `New-VM -Generation 2` (script 03)
 | `az stack-hci-vm reconnect-to-azure` (script 05) — Preview
+| `New-VM -Generation 2` (script 03)
 
 | *Best for*
-| VMs that need minimal downtime and Hyper-V-only management
 | VMs that must be managed from the Azure portal alongside other Azure Local resources
+| VMs that need minimal downtime and Hyper-V-only management
 |===
 
-=== Use Path 1 (Hyper-V) if:
-
-* You need the VM managed through Hyper-V Manager and Failover Cluster Manager only
-* Portal-based VM management is not a requirement
-* You want the simplest possible path — no Azure CLI dependencies
-
-=== Use Path 2 (Azure Local VM) if:
+=== Use Path 1 (Azure Local VM) if:
 
 * You need the VM to appear as a full `Microsoft.AzureStackHCI/virtualMachineInstances` resource
 * You are standardizing on portal-managed Azure Local VMs going forward
 * You need Azure portal operations on the VM (start/stop, extensions, RBAC, monitoring)
 * You are managing a fleet and want a single pane of glass in the Azure portal
 
-NOTE: Both paths are workload-preserving. Path 2 adds one extra step (`reconnect-to-azure`) after the Gen 2 conversion — it does not require Sysprep or any identity-destructive operation.
+=== Use Path 2 (Hyper-V) if:
+
+* You need the VM managed through Hyper-V Manager and Failover Cluster Manager only
+* Portal-based VM management is not a requirement
+* You want the simplest possible path — no Azure CLI dependencies
+
+NOTE: Both paths are workload-preserving. Path 1 adds one extra step (`reconnect-to-azure`) after the Gen 2 conversion — it does not require Sysprep or any identity-destructive operation.
 
 '''
 
@@ -227,5 +227,5 @@ NOTE: Both paths are workload-preserving. Path 2 adds one extra step (`reconnect
 
 If you have worked through this document and decided conversion is the right path, choose your runbook:
 
-* xref:runbook-hyperv.adoc[Runbook: Hyper-V Cluster Path] — workload-preserving, scripts 01–04
 * xref:runbook-azurelocal.adoc[Runbook: Azure Local VM Path] — workload-preserving, portal-managed VM, scripts 01–03, 05
+* xref:runbook-hyperv.adoc[Runbook: Hyper-V Cluster Path] — workload-preserving, scripts 01–04

@@ -36,7 +36,7 @@ WARNING: Ensure all prerequisites are satisfied before you begin. See xref:prere
   │  03 - Convert Gen 1 → Gen 2                      │
   │  Run on: Cluster node (per VM)                   │
   │  Backs up VHDXs, removes Gen 1, creates Gen 2,  │
-  │  re-clusters, re-registers with Azure Arc        │
+  │  re-attaches disks, re-adds to cluster           │
   └────────────────────┬─────────────────────────────┘
                        │
                        ▼
@@ -52,15 +52,13 @@ WARNING: Ensure all prerequisites are satisfied before you begin. See xref:prere
 
 == Step 1: Setup the Environment
 
-Run once per cluster before starting any conversions. This validates cluster health, checks Azure connectivity, inventories all Gen 1 VMs, and exports their configurations to the working directory.
+Run once per cluster before starting any conversions. This validates cluster health, inventories all Gen 1 VMs, and exports their configurations to the working directory.
 
 [source,powershell]
 ----
-.\scripts\cluster\01-Setup-ConversionEnvironment.ps1 `
-    -ClusterName "MyHCICluster" `
-    -WorkingDirectory "C:\ClusterStorage\Volume01\Gen2Conversion" `
-    -SubscriptionId "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx" `
-    -ResourceGroup "rg-azurelocal-prod"
+.\scripts\hyperv\01-Setup-ConversionEnvironment.ps1 `
+    -ClusterName "HV-Cluster01" `
+    -WorkingDirectory "C:\ClusterStorage\Volume01\Gen2Conversion"
 ----
 
 This creates the working directory structure and exports a `Gen1_VM_Inventory_YYYYMMDD.csv` plus a `_config.json` for each VM.
@@ -71,7 +69,7 @@ This creates the working directory structure and exports a `Gen1_VM_Inventory_YY
 
 This step must be performed *inside each guest VM* before its Gen 1 configuration is removed.
 
-Copy `scripts/guest/02-Convert-MBRtoGPT.ps1` into the guest VM and run it:
+Copy `scripts/hyperv/02-Convert-MBRtoGPT.ps1` into the guest VM and run it:
 
 [source,powershell]
 ----
@@ -101,25 +99,19 @@ NOTE: This step *deletes* the Gen 1 Hyper-V VM object entirely and creates a bra
 
 Specifically, the script:
 
-. Captures all settings (CPU, memory, NIC, VLAN, disk paths) from the running Gen 1 VM config
+. Captures all settings (CPU, memory, NIC, VLAN, disk paths) from the Gen 1 VM
 . Backs up the VHDX files to `WorkingDirectory\Backups\`
-. Removes the existing Arc VM resource from Azure (if present)
-. Deletes the Gen 1 VM from Hyper-V (`Remove-VM`) — the VM config is gone at this point
+. Removes the Gen 1 VM from the failover cluster and Hyper-V (`Remove-VM`) — the VM config is gone at this point
 . Creates a new Gen 2 VM (`New-VM -Generation 2`) with the same name
 . Reattaches the original VHDX files to the new VM
 . Reapplies all captured settings (CPU, memory, NICs, Secure Boot, etc.)
 . Re-adds the VM to the failover cluster
-. Re-projects the VM as an Arc-managed resource in Azure
 
 [source,powershell]
 ----
-.\scripts\cluster\03-Convert-Gen1toGen2.ps1 `
+.\scripts\hyperv\03-Convert-Gen1toGen2.ps1 `
     -VMName "WebServer01" `
-    -WorkingDirectory "C:\ClusterStorage\Volume01\Gen2Conversion" `
-    -ResourceGroup "rg-azurelocal-prod" `
-    -SubscriptionId "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx" `
-    -CustomLocationId "/subscriptions/.../customLocations/myAzureLocal" `
-    -LogicalNetworkId "/subscriptions/.../logicalNetworks/mgmt-lnet"
+    -WorkingDirectory "C:\ClusterStorage\Volume01\Gen2Conversion"
 ----
 
 '''
@@ -130,30 +122,11 @@ Use the batch orchestrator to process multiple VMs sequentially with pre-flight 
 
 [source,powershell]
 ----
-.\scripts\cluster\04-Batch-ConvertVMs.ps1 `
+.\scripts\hyperv\04-Batch-ConvertVMs.ps1 `
     -WorkingDirectory "C:\ClusterStorage\Volume01\Gen2Conversion" `
-    -ResourceGroup "rg-azurelocal-prod" `
-    -SubscriptionId "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx" `
-    -CustomLocationId "/subscriptions/.../customLocations/myAzureLocal" `
-    -LogicalNetworkId "/subscriptions/.../logicalNetworks/mgmt-lnet" `
     -VMNames @("WebServer01", "SQLServer01", "AppServer01")
 ----
 
-'''
-
-== Finding Your Azure Resource IDs
-
-[source,powershell]
-----
-# Custom Location ID
-az customlocation list --resource-group "rg-azurelocal-prod" --query "[].id" -o tsv
-
-# Logical Network ID
-az stack-hci-vm network lnet list --resource-group "rg-azurelocal-prod" --query "[].id" -o tsv
-
-# Subscription ID
-az account show --query id -o tsv
-----
 
 '''
 
@@ -168,8 +141,7 @@ WorkingDirectory/
 │       └── WebServer01_OS.vhdx
 ├── Configs/                          # VM configuration exports
 │   ├── Gen1_VM_Inventory_YYYYMMDD.csv
-│   ├── WebServer01_config.json
-│   └── WebServer01_arc_info.json
+│   └── WebServer01_config.json
 ├── Logs/                             # Conversion logs and reports
 │   ├── ConversionSetup_*.log
 │   ├── Gen2Convert_WebServer01_*.log
