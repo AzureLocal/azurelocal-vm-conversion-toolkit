@@ -1,0 +1,174 @@
+= Troubleshooting
+Azure Local Cloud | Hybrid Cloud Solutions
+:toc: left
+:toc-title: Contents
+:toclevels: 2
+
+'''
+
+[#vm-wont-boot]
+== VM Won't Boot After Gen 2 Conversion
+
+*Symptom:* VM powers on but fails to boot, shows a black screen or UEFI shell.
+
+*Steps:*
+
+. Disable Secure Boot first and retry:
++
+[source,powershell]
+----
+Set-VMFirmware -VMName 'VMName' -EnableSecureBoot Off
+Start-VM -VMName 'VMName'
+----
+
+. Check the UEFI boot order — the VHDX must be listed first:
++
+[source,powershell]
+----
+Get-VMFirmware -VMName 'VMName' | Select-Object -ExpandProperty BootOrder
+----
++
+If another device is first, reorder:
++
+[source,powershell]
+----
+$firmware = Get-VMFirmware -VMName 'VMName'
+$hdd = $firmware.BootOrder | Where-Object { $_.BootType -eq 'Drive' } | Select-Object -First 1
+Set-VMFirmware -VMName 'VMName' -FirstBootDevice $hdd
+----
+
+. Verify `mbr2gpt.exe` actually completed successfully inside the guest before the VM was shut down. Check `C:\Windows\setupact.log` by mounting the VHDX offline:
++
+[source,powershell]
+----
+Mount-VHD -Path "C:\ClusterStorage\Volume01\...\VMName_OS.vhdx" -ReadOnly
+----
+
+. If you need to roll back, the original VHDX backup is in `WorkingDirectory\Backups\VMName\`.
+
+'''
+
+[#mbr2gpt-fails-validation]
+== mbr2gpt.exe Fails Validation
+
+*Symptom:* `02-Convert-MBRtoGPT.ps1` exits with a validation error.
+
+*Most common cause:* Too many primary partitions. `mbr2gpt.exe` requires the boot disk to have *3 or fewer primary partitions* with no extended/logical partitions.
+
+*Check inside the guest VM:*
+
+[source,powershell]
+----
+# View current partition layout
+Get-Disk | Get-Partition | Format-Table -AutoSize
+
+# Check detailed setup log
+Get-Content C:\Windows\setupact.log | Select-String -Pattern "MBR2GPT" -Context 2,5
+----
+
+*Fix:* If there are more than 3 primary partitions (e.g., a recovery partition, OEM partition, etc.), you may need to remove non-essential partitions before conversion. Always back up data first.
+
+'''
+
+[#arc-registration]
+== Arc Registration Doesn't Happen Automatically
+
+*Symptom:* After Gen 2 conversion and VM boot, the VM doesn't appear in Azure portal as an Arc-enabled server within 10 minutes.
+
+*Step 1:* Restart the VM Config Agent on the Azure Local host node:
+
+[source,powershell]
+----
+Restart-Service HostAgentService -Force
+----
+
+*Step 2:* Check the agent logs:
+
+[source,powershell]
+----
+Get-EventLog -LogName Application -Source "Microsoft-AzureStack-HCI-GuestAgent" -Newest 20
+----
+
+*Step 3:* Use the manual fallback command output by `03-Convert-Gen1toGen2.ps1` at the end of its run. It prints a full `az stack-hci-vm create` command you can re-run.
+
+*Step 4:* Verify the Arc agent inside the guest is running:
+
+[source,powershell]
+----
+# Inside the guest VM
+Get-Service himds
+----
+
+If stopped, start it:
+
+[source,powershell]
+----
+Start-Service himds
+----
+
+'''
+
+[#legacy-nic-warnings]
+== Legacy NIC Warnings
+
+*Symptom:* Script logs warn that legacy/emulated NICs were skipped.
+
+*Explanation:* Gen 2 VMs do not support legacy (emulated) network adapters — only synthetic (vmbus) NICs. The scripts automatically skip legacy adapters and only carry over synthetic ones.
+
+*Fix:* If the guest OS was relying on a legacy NIC driver for network connectivity, ensure *Hyper-V Integration Services* are fully installed inside the guest before conversion. After conversion, the guest will communicate over the synthetic NIC only.
+
+'''
+
+[#linux-vms]
+== Linux VMs
+
+Linux VMs require additional manual steps — the scripts handle the Hyper-V/cluster side but GRUB must be reconfigured manually for UEFI boot.
+
+*General steps after Gen 2 recreation:*
+
+. Boot the VM — it will likely fail to boot from disk initially
+. Boot from an ISO (attach a Linux live image as a Gen 2 DVD)
+. Mount the existing root partition
+. Reinstall/reconfigure GRUB for UEFI:
++
+[source,bash]
+----
+# Example for Ubuntu/Debian (run from live environment chroot)
+mount /dev/sda2 /mnt
+mount --bind /dev /mnt/dev
+mount --bind /proc /mnt/proc
+mount --bind /sys /mnt/sys
+chroot /mnt
+grub-install --target=x86_64-efi --efi-directory=/boot/efi
+update-grub
+----
+
+. Disable Secure Boot in Hyper-V firmware settings if the Linux distro doesn't have a signed bootloader
+
+'''
+
+[#rolling-back-a-failed-conversion]
+== Rolling Back a Failed Conversion
+
+Each VM's VHDX files are backed up to `WorkingDirectory\Backups\VMName\` before the Gen 1 VM is removed.
+
+To restore:
+
+[source,powershell]
+----
+# 1. Remove the (broken) Gen 2 VM if it exists
+Remove-VM -VMName 'VMName' -Force
+
+# 2. Recreate the Gen 1 VM with original config
+# Use the exported config from WorkingDirectory\Configs\VMName_config.json to reconstruct parameters
+New-VM -Name 'VMName' -Generation 1 -MemoryStartupBytes <bytes> -SwitchName '<switch>'
+
+# 3. Attach the backup VHDX
+Add-VMHardDiskDrive -VMName 'VMName' -Path 'WorkingDirectory\Backups\VMName\VMName_OS.vhdx'
+
+# 4. Re-add to cluster
+Add-ClusterVirtualMachineRole -VMName 'VMName'
+
+# 5. Start VM
+Start-VM -VMName 'VMName'
+----

@@ -1,0 +1,23 @@
+# Working directory outputs (created at runtime on the CSV)
+Logs/
+Backups/
+Temp/
+Configs/
+
+# Log and report files
+*.log
+*.csv
+
+# Exported VM config JSON files
+*_config.json
+*_arc_info.json
+
+# PowerShell session artifacts
+*.pssproj.user
+
+# VS Code
+.vscode/
+
+# Windows
+Thumbs.db
+desktop.ini

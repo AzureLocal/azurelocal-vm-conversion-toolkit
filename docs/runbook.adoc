@@ -1,0 +1,173 @@
+= Runbook
+Azure Local Cloud | Hybrid Cloud Solutions
+:toc: left
+:toc-title: Contents
+:toclevels: 2
+
+This guide walks through running the Azure Local VM Conversion Toolkit from start to finish.
+
+WARNING: Ensure all prerequisites are satisfied before you begin. See xref:prerequisites.adoc[Prerequisites].
+
+'''
+
+== Workflow Overview
+
+....
+  ┌──────────────────────────────────────────────────┐
+  │  01 - Setup Environment                          │
+  │  Run on: Cluster node                            │
+  │  Inventories Gen 1 VMs, exports configs          │
+  └────────────────────┬─────────────────────────────┘
+                       │
+                       ▼
+  ┌──────────────────────────────────────────────────┐
+  │  02 - Convert MBR → GPT                          │
+  │  Run on: Inside each guest VM                    │
+  │  Converts boot disk partition table              │
+  │                                                  │
+  │  ⚠️  SHUT DOWN the VM after this step!            │
+  │     Do NOT reboot — it won't boot as Gen 1.      │
+  └────────────────────┬─────────────────────────────┘
+                       │
+                       ▼
+  ┌──────────────────────────────────────────────────┐
+  │  03 - Convert Gen 1 → Gen 2                      │
+  │  Run on: Cluster node (per VM)                   │
+  │  Backs up VHDXs, removes Gen 1, creates Gen 2,  │
+  │  re-clusters, re-registers with Azure Arc        │
+  └────────────────────┬─────────────────────────────┘
+                       │
+                       ▼
+  ┌──────────────────────────────────────────────────┐
+  │  04 - Batch Orchestrator (Optional)              │
+  │  Run on: Cluster node                            │
+  │  Processes multiple VMs sequentially with        │
+  │  pre-flight checks and summary reporting         │
+  └──────────────────────────────────────────────────┘
+....
+
+'''
+
+== Step 1: Setup the Environment
+
+Run once per cluster before starting any conversions. This validates cluster health, checks Azure connectivity, inventories all Gen 1 VMs, and exports their configurations to the working directory.
+
+[source,powershell]
+----
+.\scripts\cluster\01-Setup-ConversionEnvironment.ps1 `
+    -ClusterName "MyHCICluster" `
+    -WorkingDirectory "C:\ClusterStorage\Volume01\Gen2Conversion" `
+    -SubscriptionId "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx" `
+    -ResourceGroup "rg-azurelocal-prod"
+----
+
+This creates the working directory structure and exports a `Gen1_VM_Inventory_YYYYMMDD.csv` plus a `_config.json` for each VM.
+
+'''
+
+== Step 2: Convert MBR → GPT (Inside Each Guest VM)
+
+This step must be performed *inside each guest VM* before its Gen 1 configuration is removed.
+
+Copy `scripts/guest/02-Convert-MBRtoGPT.ps1` into the guest VM and run it:
+
+[source,powershell]
+----
+# Validate first (dry run — no changes made)
+.\02-Convert-MBRtoGPT.ps1 -ValidateOnly
+
+# Perform the conversion
+.\02-Convert-MBRtoGPT.ps1
+----
+
+CAUTION: Shut down the VM immediately after — do *NOT* reboot. The disk is now GPT but the VM is still Gen 1. Rebooting will fail.
+
+[source,powershell]
+----
+Stop-Computer -Force
+----
+
+If validation fails, check `C:\Windows\setupact.log` inside the guest. See xref:troubleshooting.adoc#mbr2gpt-fails-validation[mbr2gpt fails validation] for common fixes.
+
+'''
+
+== Step 3: Convert Gen 1 → Gen 2
+
+Run from the cluster node after the guest VM is shut down. This backs up the VHDXs, removes the Gen 1 VM, recreates it as Gen 2, re-adds it to the failover cluster, and re-registers it with Azure Arc.
+
+[source,powershell]
+----
+.\scripts\cluster\03-Convert-Gen1toGen2.ps1 `
+    -VMName "WebServer01" `
+    -WorkingDirectory "C:\ClusterStorage\Volume01\Gen2Conversion" `
+    -ResourceGroup "rg-azurelocal-prod" `
+    -SubscriptionId "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx" `
+    -CustomLocationId "/subscriptions/.../customLocations/myAzureLocal" `
+    -LogicalNetworkId "/subscriptions/.../logicalNetworks/mgmt-lnet"
+----
+
+'''
+
+== Step 4: Batch Convert Multiple VMs (Optional)
+
+Use the batch orchestrator to process multiple VMs sequentially with pre-flight checks and a summary report.
+
+[source,powershell]
+----
+.\scripts\cluster\04-Batch-ConvertVMs.ps1 `
+    -WorkingDirectory "C:\ClusterStorage\Volume01\Gen2Conversion" `
+    -ResourceGroup "rg-azurelocal-prod" `
+    -SubscriptionId "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx" `
+    -CustomLocationId "/subscriptions/.../customLocations/myAzureLocal" `
+    -LogicalNetworkId "/subscriptions/.../logicalNetworks/mgmt-lnet" `
+    -VMNames @("WebServer01", "SQLServer01", "AppServer01")
+----
+
+'''
+
+== Finding Your Azure Resource IDs
+
+[source,powershell]
+----
+# Custom Location ID
+az customlocation list --resource-group "rg-azurelocal-prod" --query "[].id" -o tsv
+
+# Logical Network ID
+az stack-hci-vm network lnet list --resource-group "rg-azurelocal-prod" --query "[].id" -o tsv
+
+# Subscription ID
+az account show --query id -o tsv
+----
+
+'''
+
+== Working Directory Structure
+
+The toolkit creates an organized working directory on your CSV:
+
+....
+WorkingDirectory/
+├── Backups/                          # VHDX backup copies (per VM)
+│   └── WebServer01/
+│       └── WebServer01_OS.vhdx
+├── Configs/                          # VM configuration exports
+│   ├── Gen1_VM_Inventory_YYYYMMDD.csv
+│   ├── WebServer01_config.json
+│   └── WebServer01_arc_info.json
+├── Logs/                             # Conversion logs and reports
+│   ├── ConversionSetup_*.log
+│   ├── Gen2Convert_WebServer01_*.log
+│   └── BatchReport_*.csv
+├── Temp/
+└── Scripts/
+....
+
+'''
+
+== Important Notes
+
+* *Downtime*: Each VM has downtime from shutdown through Gen 2 first boot — typically 5–15 minutes plus VHDX backup time
+* *Rollback*: VHDX backups enable rollback — recreate the Gen 1 VM and attach the backup copies. See xref:troubleshooting.adoc#rolling-back-a-failed-conversion[Rolling Back a Failed Conversion]
+* *Linux VMs*: May need Secure Boot disabled and GRUB reconfigured for UEFI boot. See xref:troubleshooting.adoc#linux-vms[Linux VMs]
+* *Disk space*: Plan for approximately 1x total VHDX size for backups
+* *Test first*: Always convert a non-critical VM first to validate the process in your environment

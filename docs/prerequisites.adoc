@@ -1,0 +1,165 @@
+= Prerequisites
+Azure Local Cloud | Hybrid Cloud Solutions
+:toc: left
+:toc-title: Contents
+:toclevels: 2
+
+Before running any conversion scripts, ensure the following requirements are met.
+
+'''
+
+== Azure Local Cluster
+
+[cols="1,2", options="header"]
+|===
+| Requirement | Details
+
+| *Version*
+| 23H2 recommended; 22H2 supported
+
+| *Cluster health*
+| All nodes healthy, no active cluster events
+
+| *CSV availability*
+| Sufficient free space on the target CSV (~1x total VHDX size of VMs being converted)
+
+| *Maintenance window*
+| Each VM will be offline from shutdown through Gen 2 first boot (typically 5–15 minutes plus VHDX backup time)
+|===
+
+'''
+
+== PowerShell Modules (Cluster Node)
+
+Install or verify these modules are present on the Azure Local node where you'll run the cluster-side scripts:
+
+[source,powershell]
+----
+# Check installed modules
+Get-Module -ListAvailable Az.Accounts, Az.Resources, Az.StackHCI, Az.ConnectedMachine, Hyper-V, FailoverClusters
+
+# Install Az modules if missing
+Install-Module -Name Az.Accounts, Az.Resources, Az.StackHCI, Az.ConnectedMachine -Scope CurrentUser -Force
+----
+
+[cols="1,2", options="header"]
+|===
+| Module | Purpose
+
+| `Az.Accounts`
+| Azure authentication
+
+| `Az.Resources`
+| Azure resource management
+
+| `Az.StackHCI`
+| Azure Local / Stack HCI registration
+
+| `Az.ConnectedMachine`
+| Azure Arc connected machine management
+
+| `Hyper-V`
+| VM management (built into Windows Server)
+
+| `FailoverClusters`
+| Cluster role management (built into Windows Server)
+|===
+
+'''
+
+== Azure CLI (Cluster Node)
+
+Required for the manual Arc registration fallback in `03-Convert-Gen1toGen2.ps1`.
+
+[source,powershell]
+----
+# Verify Azure CLI is installed
+az --version
+
+# Install the Stack HCI VM extension
+az extension add --name stack-hci-vm
+
+# Verify
+az extension list --query "[?name=='stack-hci-vm']"
+----
+
+'''
+
+== Azure Permissions
+
+The account running the scripts needs the following Azure RBAC roles on the target resource group:
+
+[cols="1,2", options="header"]
+|===
+| Role | Reason
+
+| *Contributor* (or scoped equivalents)
+| Create/delete Azure Arc machine resources
+
+| *Azure Connected Machine Resource Administrator*
+| Re-register Arc agents
+|===
+
+[source,powershell]
+----
+# Verify current Azure login
+Connect-AzAccount
+Get-AzContext
+----
+
+'''
+
+== Guest VM Requirements
+
+For each VM being converted, the guest OS must meet these requirements before running `02-Convert-MBRtoGPT.ps1`:
+
+[cols="1,2", options="header"]
+|===
+| Requirement | Details
+
+| *OS bitness*
+| 64-bit only — `mbr2gpt.exe` does not support 32-bit Windows
+
+| *Windows version*
+| Windows Server 2012 R2+ or Windows 10+ (build 10.0.14393+)
+
+| *Partition count*
+| Maximum 3 primary partitions on the boot disk
+
+| *Partition type*
+| No extended or logical partitions on the boot disk
+
+| *Integration Services*
+| Hyper-V Integration Services installed and current (required for synthetic NIC handoff)
+
+| *Linux*
+| See xref:troubleshooting.adoc#linux-vms[Linux VMs] — requires manual GRUB reconfiguration
+|===
+
+=== Checking mbr2gpt Compatibility Inside a Guest
+
+[source,powershell]
+----
+# Run inside the guest VM — validates without making changes
+.\02-Convert-MBRtoGPT.ps1 -ValidateOnly
+----
+
+If validation fails, check `C:\Windows\setupact.log` inside the guest for detailed diagnostics.
+
+'''
+
+== Finding Required Azure Resource IDs
+
+You'll need these IDs for scripts 03 and 04:
+
+[source,powershell]
+----
+# Custom Location ID
+az customlocation list --resource-group "rg-azurelocal-prod" --query "[].id" -o tsv
+
+# Logical Network ID
+az stack-hci-vm network lnet list --resource-group "rg-azurelocal-prod" --query "[].id" -o tsv
+
+# Subscription ID
+az account show --query id -o tsv
+----
