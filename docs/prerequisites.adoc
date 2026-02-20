@@ -69,7 +69,10 @@ Install-Module -Name Az.Accounts, Az.Resources, Az.StackHCI, Az.ConnectedMachine
 
 == Azure CLI (Cluster Node)
 
-Required for the manual Arc registration fallback in `03-Convert-Gen1toGen2.ps1`.
+Required for two purposes:
+
+* *Path 1 and Path 2:* The manual Arc registration fallback logged by `03-Convert-Gen1toGen2.ps1` uses `az stack-hci-vm`
+* *Path 2 only:* `05-Reconnect-AzureLocalVM.ps1` requires Azure CLI with the `stack-hci-vm` extension to call `az stack-hci-vm reconnect-to-azure`
 
 [source,powershell]
 ----

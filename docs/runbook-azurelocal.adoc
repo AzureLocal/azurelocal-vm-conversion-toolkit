@@ -4,32 +4,38 @@ Azure Local Cloud | Hybrid Cloud Solutions
 :toc-title: Contents
 :toclevels: 2
 
-NOTE: *This runbook covers the Azure Local VM path (scripts 01–02, 05–06).* The resulting VM is a full `Microsoft.AzureStackHCI/virtualMachineInstances` resource visible in the Azure portal and managed through the Azure Local management plane. If you only need a Gen 2 VM managed through Hyper-V directly, see xref:runbook-hyperv.adoc[Runbook: Hyper-V Cluster Path].
+NOTE: *This runbook covers the Azure Local VM path (scripts 01–03, 05).* The resulting VM is a full `Microsoft.AzureStackHCI/virtualMachineInstances` resource visible in the Azure portal and managed through the Azure Local management plane. If you only need a Gen 2 VM managed through Hyper-V directly without portal management, see xref:runbook-hyperv.adoc[Runbook: Hyper-V Cluster Path].
 
-WARNING: *This path is NOT workload-preserving.* Creating a proper Azure Local VM resource requires the source VHDX to be sysprepped (generalized). Sysprep destroys the machine identity — the computer account, SID, installed application state, and all machine-specific configuration are lost. You will need to re-join the domain, re-install applications, and restore data after provisioning the new VM. Plan your migration window accordingly.
+NOTE: *This path IS workload-preserving.* The VM keeps its machine identity, domain join, installed applications, and all OS state. No Sysprep. No reinstallation. The same converted Gen 2 VM that runs in Hyper-V is reconnected into the Azure control plane using `az stack-hci-vm reconnect-to-azure`.
+
+WARNING: `az stack-hci-vm reconnect-to-azure` is currently in *Preview*. Validate this capability is available in your Azure Local version before planning production use.
 
 WARNING: Ensure all prerequisites are satisfied before you begin. See xref:prerequisites.adoc[Prerequisites].
 
 '''
 
-== What You Are Actually Doing
+== What This Path Does
 
-It is important to understand what this path does — and what it does not do.
+The Azure Local management plane only recognizes VMs it created or was explicitly told about. A Gen 1 VM migrated from VMware and converted to Gen 2 via Hyper-V exists outside that management plane — it is invisible to the Azure portal. This path fixes that.
 
+`az stack-hci-vm reconnect-to-azure` takes an existing Hyper-V VM by name and projects it into Azure as a `Microsoft.AzureStackHCI/virtualMachineInstances` resource. The Arc resource bridge handles the projection — no in-guest agent required.
+
+[cols="1,1", options="header"]
 |===
-| What it IS | What it is NOT
+| What it DOES | What it does NOT do
 
-| A new VM deployment from a sysprepped (generalized) VHDX image
-| A workload-preserving in-place conversion
+| Projects the existing Gen 2 Hyper-V VM into the Azure management plane
+| Create a new VM or duplicate the disk
 
-| A `Microsoft.AzureStackHCI/virtualMachineInstances` resource visible and manageable in the Azure portal
-| A migration of a running system's identity and state
+| Preserves the full OS state — domain join, apps, users, identity
+| Require Sysprep or generalization of any kind
 
-| A Gen 2 VM with vTPM, UEFI, and Secure Boot
-| A simple rename or reconfigure of the existing VM
+| Makes the VM visible and manageable in the Azure portal VM blade
+| Replace the Hyper-V layer — the VM still runs on Hyper-V
+
+| Enables Azure portal operations: start/stop, extensions, RBAC
+| Migrate the VM to a different host or storage location
 |===
-
-The original VHDX disk contents (your data) can be preserved in a separate data disk. The OS disk must be sysprepped and re-deployed from the generalized image.
 
 '''
 
@@ -54,20 +60,20 @@ The original VHDX disk contents (your data) can be preserved in a separate data 
                        │
                        ▼
   ┌──────────────────────────────────────────────────┐
-  │  05 - Sysprep / Prepare Image                    │
-  │  Run on: Inside the guest VM                     │
-  │  Generalizes the OS disk for deployment          │
-  │                                                  │
-  │  ⚠️  IDENTITY DESTRUCTIVE — machine SID,         │
-  │     computer account, app state lost             │
+  │  03 - Convert Gen 1 → Gen 2                      │
+  │  Run on: Cluster node                            │
+  │  Same as Hyper-V path — backs up VHDXs,          │
+  │  removes Gen 1, creates Gen 2 Hyper-V VM         │
   └────────────────────┬─────────────────────────────┘
                        │
                        ▼
   ┌──────────────────────────────────────────────────┐
-  │  06 - Create Azure Local VM                      │
-  │  Run on: Cluster node (or management workstation)│
-  │  Registers VHDX as image, creates NIC resource, │
-  │  deploys as Azure Local VM via az stack-hci-vm   │
+  │  05 - Reconnect to Azure                         │
+  │  Run on: Cluster node / mgmt workstation         │
+  │  Creates Azure Local NIC resource, then calls    │
+  │  az stack-hci-vm reconnect-to-azure to project   │
+  │  the Gen 2 Hyper-V VM into the Azure portal as   │
+  │  Microsoft.AzureStackHCI/virtualMachineInstances │
   └──────────────────────────────────────────────────┘
 ....
 
@@ -92,7 +98,7 @@ This creates the working directory structure and exports a `Gen1_VM_Inventory_YY
 
 == Step 2: Convert MBR → GPT (Inside the Guest VM)
 
-This step must be performed *inside each guest VM* before sysprep.
+This step must be performed *inside each guest VM*. The boot disk must be GPT before the VM can boot under UEFI firmware (Gen 2).
 
 Copy `scripts/guest/02-Convert-MBRtoGPT.ps1` into the guest VM and run it:
 
@@ -105,76 +111,55 @@ Copy `scripts/guest/02-Convert-MBRtoGPT.ps1` into the guest VM and run it:
 .\02-Convert-MBRtoGPT.ps1
 ----
 
-CAUTION: Do *NOT* reboot after this step. Proceed directly to Step 3 (Sysprep). If validation fails, see xref:troubleshooting.adoc#mbr2gpt-fails-validation[mbr2gpt fails validation].
-
-'''
-
-== Step 3: Sysprep — Prepare the Image (Inside the Guest VM)
-
-[WARNING]
-====
-*This is a one-way operation.* Sysprep removes the machine SID, empties the computer account credentials, removes any machine-bound application licenses, and shuts the VM down. You cannot undo this without restoring from a backup.
-
-Before running, ensure you have:
-
-* [ ] Noted the current computer name
-* [ ] Noted all domain join information (domain, OU path, service accounts)
-* [ ] Documented installed applications and their license keys
-* [ ] Backed up any local data you intend to preserve (move to a separate data VHDX first)
-====
-
-Copy `scripts/guest/05-Sysprep-PrepareImage.ps1` into the guest VM and run it:
+CAUTION: Shut down the VM immediately after — do *NOT* reboot. The disk is now GPT but the VM is still Gen 1. Rebooting will fail.
 
 [source,powershell]
 ----
-# Dry run — validate only, no changes made
-.\05-Sysprep-PrepareImage.ps1 -ValidateOnly
-
-# Perform sysprep (will shut down the VM when complete)
-.\05-Sysprep-PrepareImage.ps1
+Stop-Computer -Force
 ----
 
-The VM will shut down automatically when Sysprep completes. Do not start it again — the VHDX is now a generalized image and booting it before registering it in Azure Local will break the generalization.
-
-If Sysprep fails, check `C:\Windows\System32\Sysprep\Panther\setupact.log` inside the guest for details.
+If validation fails, see xref:troubleshooting.adoc#mbr2gpt-fails-validation[mbr2gpt fails validation].
 
 '''
 
-== Step 4: Create the Azure Local VM
+== Step 3: Convert Gen 1 → Gen 2 (Cluster Node)
 
-Run from the cluster node or any management workstation with the Azure CLI and the `stack-hci-vm` extension installed.
+This step is identical to the Hyper-V path. Run it from the cluster node after the guest VM is shut down.
 
-=== 4a: Register the VHDX as an Azure Local Image Resource
+NOTE: This step deletes the Gen 1 VM object and creates a new Gen 2 Hyper-V VM with the same name, reattaching the existing VHDXs. The workload is preserved — only the VM configuration object is recreated. See xref:runbook-hyperv.adoc#step-3-convert-gen-1-gen-2[Runbook: Hyper-V Cluster Path — Step 3] for the full explanation of what the script does internally.
 
 [source,powershell]
 ----
-.\scripts\cluster\06-Create-AzureLocalVM.ps1 `
+.\scripts\cluster\03-Convert-Gen1toGen2.ps1 `
     -VMName "WebServer01" `
     -WorkingDirectory "C:\ClusterStorage\Volume01\Gen2Conversion" `
-    -SubscriptionId "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx" `
     -ResourceGroup "rg-azurelocal-prod" `
+    -SubscriptionId "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx" `
     -CustomLocationId "/subscriptions/.../customLocations/myAzureLocal" `
-    -LogicalNetworkId "/subscriptions/.../logicalNetworks/mgmt-lnet" `
-    -StoragePathId "/subscriptions/.../storageContainers/myStoragePath" `
-    -VHDXSourcePath "C:\ClusterStorage\Volume01\Gen2Conversion\Backups\WebServer01\WebServer01_OS.vhdx"
+    -LogicalNetworkId "/subscriptions/.../logicalNetworks/mgmt-lnet"
 ----
 
-Internally, the script performs these operations in sequence:
+After script 03 completes you have a Gen 2 Hyper-V VM running on the cluster. At this point it is still not visible in the Azure portal VM blade. That is fixed in the next step.
 
-. Registers the VHDX as an `Microsoft.AzureStackHCI/galleryImages` resource:
-+
+'''
+
+== Step 4: Reconnect to the Azure Management Plane
+
+This step projects the Gen 2 Hyper-V VM into Azure as a `Microsoft.AzureStackHCI/virtualMachineInstances` resource. The VM's workload, identity, and state are completely untouched.
+
 [source,powershell]
 ----
-az stack-hci-vm image create `
-    --name "img-WebServer01-gen2" `
-    --resource-group "rg-azurelocal-prod" `
-    --custom-location $CustomLocationId `
-    --os-type "Windows" `
-    --image-path "C:\ClusterStorage\...\WebServer01_OS.vhdx" `
-    --storage-path-id $StoragePathId
+.\scripts\cluster\05-Reconnect-AzureLocalVM.ps1 `
+    -VMName "WebServer01" `
+    -ResourceGroup "rg-azurelocal-prod" `
+    -SubscriptionId "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx" `
+    -CustomLocationId "/subscriptions/.../customLocations/myAzureLocal" `
+    -LogicalNetworkId "/subscriptions/.../logicalNetworks/mgmt-lnet"
 ----
 
-. Creates a NIC resource:
+Internally, the script does two things:
+
+. Creates an Azure Local logical NIC resource for the VM on the target logical network:
 +
 [source,powershell]
 ----
@@ -185,53 +170,26 @@ az stack-hci-vm network nic create `
     --subnet-id $LogicalNetworkId
 ----
 
-. Deploys the VM:
+. Calls `reconnect-to-azure`, which locates the VM in Hyper-V by name and creates the Azure resource:
 +
 [source,powershell]
 ----
-az stack-hci-vm create `
-    --name "WebServer01" `
+az stack-hci-vm reconnect-to-azure `
     --resource-group "rg-azurelocal-prod" `
     --custom-location $CustomLocationId `
-    --image "img-WebServer01-gen2" `
-    --nics "nic-WebServer01" `
-    --storage-path-id $StoragePathId `
-    --admin-username "localadmin"
+    --name "WebServer01" `
+    --local-vm-name "WebServer01" `
+    --nics "<nic-resource-id>"
 ----
 
-=== 4b: Verify the VM in the Azure Portal
+=== Verify in the Azure Portal
 
-After deployment completes, verify the VM appears in the Azure portal under *Azure Local > Virtual Machines* and has `Microsoft.AzureStackHCI/virtualMachineInstances` as its resource type.
+After the command completes, confirm the VM appears in the Azure portal:
 
-'''
-
-== Step 5: Post-Deployment Tasks
-
-Because Sysprep generalized the OS, the following must be completed on first boot:
-
-. *OOBE / Specialize pass* — Windows will run through a mini-setup. Provide local admin credentials when prompted.
-. *Rename the computer* — restore the original or intended machine name:
-+
-[source,powershell]
-----
-Rename-Computer -NewName "WebServer01" -Restart
-----
-
-. *Re-join the domain*:
-+
-[source,powershell]
-----
-Add-Computer -DomainName "contoso.local" `
-    -OUPath "OU=Servers,DC=contoso,DC=local" `
-    -Credential (Get-Credential) `
-    -Restart
-----
-
-. *Re-install applications* — any applications that bound themselves to the original machine SID (such as domain-joined SQL Server instances, certificate-bound services, or software with hardware-locked licensing) must be reinstalled or reactivated.
-
-. *Restore data* — if data was moved to a separate data VHDX before sysprep, attach that disk to the new VM and move data back to the appropriate location.
-
-. *Update DNS / load balancer entries* — if the old VM had a static IP or DNS A record, update these to point to the new VM's IP.
+. Navigate to your Azure Local instance in the portal
+. Go to *Virtual Machines*
+. Confirm `WebServer01` is listed with resource type `Microsoft.AzureStackHCI/virtualMachineInstances`
+. Confirm the VM status matches what you expect (running/stopped)
 
 '''
 
@@ -245,9 +203,6 @@ az customlocation list --resource-group "rg-azurelocal-prod" --query "[].id" -o 
 # Logical Network ID
 az stack-hci-vm network lnet list --resource-group "rg-azurelocal-prod" --query "[].id" -o tsv
 
-# Storage Path ID
-az stack-hci-vm storagepath list --resource-group "rg-azurelocal-prod" --query "[].id" -o tsv
-
 # Subscription ID
 az account show --query id -o tsv
 ----
@@ -256,7 +211,8 @@ az account show --query id -o tsv
 
 == Important Notes
 
-* *Downtime*: Begins when Sysprep shuts down the VM. Expect several hours to complete all post-deployment tasks. Plan for a full maintenance window.
-* *No rollback after Sysprep*: Once Sysprep completes, the only recovery path is restoring from a pre-sysprep VHDX backup. Ensure backups were taken (script 01 does this).
-* *Data disks*: Additional data VHDXs can be attached to the new Azure Local VM using `az stack-hci-vm disk attach` without going through sysprep. Only the OS disk must be generalized.
-* *Arc-managed automatically*: The new VM is Arc-projected by the Azure Local platform via the Arc resource bridge. You do not install the Connected Machine agent manually.
+* *Downtime*: Each VM has downtime from shutdown (Step 2) through Gen 2 first boot (end of Step 3) — typically 5–15 minutes plus VHDX backup time. The reconnect step (Step 4) does not require downtime.
+* *Rollback*: VHDX backups taken in Step 3 enable rollback — recreate the Gen 1 VM and attach the backup copies. See xref:troubleshooting.adoc#rolling-back-a-failed-conversion[Rolling Back a Failed Conversion]. The reconnect operation can be undone by deleting the Azure resource; the Hyper-V VM is unaffected.
+* *Preview caveat*: `reconnect-to-azure` is a preview command. Confirm it is available in your `stack-hci-vm` extension version before use. Run `az stack-hci-vm reconnect-to-azure --help` to verify.
+* *Arc projection*: The VM is Arc-projected by the Azure Local platform via the Arc resource bridge once reconnected. You do not install the Connected Machine agent manually.
+* *Existing Arc registration*: If script 03 already re-registered the VM with Arc as a plain Arc-enabled server, the reconnect step will reconcile that into a full `virtualMachineInstances` resource.

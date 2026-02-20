@@ -26,9 +26,9 @@ There is no in-place upgrade path from Hyper-V Gen 1 to Gen 2. This toolkit auto
 
 **Path 2 — Azure Local VM (portal-managed)**
 1. Same inventory and MBR→GPT steps as Path 1
-2. Syspreps (generalizes) the guest OS — identity-destructive; machine SID and domain join are lost
-3. Registers the sysprepped VHDX as an Azure Local image resource
-4. Deploys a new `Microsoft.AzureStackHCI/virtualMachineInstances` resource via `az stack-hci-vm create`
+2. Same Gen 1→Gen 2 Hyper-V conversion as Path 1 (scripts 01–03)
+3. Registers the converted Gen 2 VM into the Azure Local management plane using `az stack-hci-vm reconnect-to-azure` — workload-preserving, no Sysprep, no identity loss
+4. VM becomes a `Microsoft.AzureStackHCI/virtualMachineInstances` resource visible and managed in the Azure portal
 
 See **[docs/gen1-vs-gen2.adoc](docs/gen1-vs-gen2.adoc)** to choose the right path before running anything.
 
@@ -63,14 +63,14 @@ See [docs/prerequisites.adoc](docs/prerequisites.adoc) for full details and setu
 | [`scripts/cluster/03-Convert-Gen1toGen2.ps1`](scripts/cluster/03-Convert-Gen1toGen2.ps1) | Azure Local cluster node | Removes Gen 1 VM, creates Gen 2 Hyper-V VM with same config, re-clusters, re-registers with Arc |
 | [`scripts/cluster/04-Batch-ConvertVMs.ps1`](scripts/cluster/04-Batch-ConvertVMs.ps1) | Azure Local cluster node | Orchestrates Script 03 across multiple VMs with pre-flight checks and reporting |
 
-### Path 2 — Azure Local VM (portal-managed, scripts 01–02 + 05–06)
+### Path 2 — Azure Local VM (portal-managed, scripts 01–03 + 05)
 
 | Script | Runs On | Purpose |
 |--------|---------|--------|
 | [`scripts/cluster/01-Setup-ConversionEnvironment.ps1`](scripts/cluster/01-Setup-ConversionEnvironment.ps1) | Azure Local cluster node | Same as Path 1 — inventory and setup |
 | [`scripts/guest/02-Convert-MBRtoGPT.ps1`](scripts/guest/02-Convert-MBRtoGPT.ps1) | Inside each guest VM | Same as Path 1 — MBR to GPT conversion |
-| [`scripts/guest/05-Sysprep-PrepareImage.ps1`](scripts/guest/05-Sysprep-PrepareImage.ps1) | Inside each guest VM | Validates, then runs Sysprep `/generalize /oobe /shutdown` — **destructive, identity-destroying** |
-| [`scripts/cluster/06-Create-AzureLocalVM.ps1`](scripts/cluster/06-Create-AzureLocalVM.ps1) | Cluster node / mgmt workstation | Registers sysprepped VHDX as image resource, creates NIC, deploys Azure Local VM via `az stack-hci-vm create` |
+| [`scripts/cluster/03-Convert-Gen1toGen2.ps1`](scripts/cluster/03-Convert-Gen1toGen2.ps1) | Azure Local cluster node | Same as Path 1 — removes Gen 1, creates Gen 2 Hyper-V VM |
+| [`scripts/cluster/05-Reconnect-AzureLocalVM.ps1`](scripts/cluster/05-Reconnect-AzureLocalVM.ps1) | Cluster node / mgmt workstation | Creates Azure Local NIC resource, then calls `az stack-hci-vm reconnect-to-azure` to project the Gen 2 VM into the portal as `Microsoft.AzureStackHCI/virtualMachineInstances` |
 
 ## Documentation
 
@@ -78,7 +78,7 @@ See [docs/prerequisites.adoc](docs/prerequisites.adoc) for full details and setu
 |-----|-------------|
 | [docs/gen1-vs-gen2.adoc](docs/gen1-vs-gen2.adoc) | **Start here** — Gen 1 vs Gen 2 decision guide, feature comparison, path selection, and checklist |
 | [docs/runbook-hyperv.adoc](docs/runbook-hyperv.adoc) | Runbook for Path 1 — Hyper-V Cluster (workload-preserving, scripts 01–04) |
-| [docs/runbook-azurelocal.adoc](docs/runbook-azurelocal.adoc) | Runbook for Path 2 — Azure Local VM (portal-managed, requires Sysprep, scripts 01–02 + 05–06) |
+| [docs/runbook-azurelocal.adoc](docs/runbook-azurelocal.adoc) | Runbook for Path 2 — Azure Local VM (portal-managed, workload-preserving, scripts 01–03 + 05) |
 | [docs/prerequisites.adoc](docs/prerequisites.adoc) | Full prerequisites, module setup, and Azure permission requirements |
 | [docs/troubleshooting.adoc](docs/troubleshooting.adoc) | Common issues and solutions, rollback instructions |
 
