@@ -3,7 +3,7 @@
 
 <#
 .SYNOPSIS
-    Converts a Gen 1 VM to Gen 2 on Azure Local and re-registers it as an Arc-managed VM.
+    Converts a Gen 1 VM to Gen 2 on Azure Local. Run Script 05 afterwards to project the VM into the Azure portal.
 
 .DESCRIPTION
     This script runs on an Azure Local (HCI) cluster node and:
@@ -13,7 +13,9 @@
     4. Creates a new Gen 2 VM with the same configuration
     5. Attaches the existing VHDX disks (already converted to GPT via Script 02)
     6. Adds the VM back to the cluster
-    7. Re-registers the VM as an Azure Arc-managed VM on Azure Local
+
+    Azure portal projection (Arc re-registration) is handled separately by
+    Script 05 (05-Reconnect-AzureLocalVM.ps1) using az stack-hci-vm reconnect-to-azure.
 
     PREREQUISITES:
     - Script 01 has been run (environment setup, config exports exist)

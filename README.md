@@ -61,7 +61,7 @@ See [docs/prerequisites.adoc](docs/prerequisites.adoc) for full details and setu
 |--------|---------|--------|
 | [`scripts/azurelocal/01-Setup-ConversionEnvironment.ps1`](scripts/azurelocal/01-Setup-ConversionEnvironment.ps1) | Azure Local cluster node | Validates cluster and Azure connectivity, inventories Gen 1 VMs, exports configs |
 | [`scripts/azurelocal/02-Convert-MBRtoGPT.ps1`](scripts/azurelocal/02-Convert-MBRtoGPT.ps1) | Inside each guest VM | Validates OS compatibility and runs `mbr2gpt.exe` to convert the boot disk from MBR to GPT |
-| [`scripts/azurelocal/03-Convert-Gen1toGen2.ps1`](scripts/azurelocal/03-Convert-Gen1toGen2.ps1) | Azure Local cluster node | Removes Gen 1 VM, creates Gen 2 Hyper-V VM with same config, re-clusters, Arc resource bookkeeping |
+| [`scripts/azurelocal/03-Convert-Gen1toGen2.ps1`](scripts/azurelocal/03-Convert-Gen1toGen2.ps1) | Azure Local cluster node | Removes Gen 1 VM, creates Gen 2 Hyper-V VM with same config, re-clusters. Run Script 05 next to project into Azure portal. |
 | [`scripts/azurelocal/05-Reconnect-AzureLocalVM.ps1`](scripts/azurelocal/05-Reconnect-AzureLocalVM.ps1) | Cluster node / mgmt workstation | Creates Azure Local NIC resource, then calls `az stack-hci-vm reconnect-to-azure` to project the Gen 2 VM into the portal as `Microsoft.AzureStackHCI/virtualMachineInstances` |
 
 ### Path 2 — Hyper-V Cluster (workload-preserving, scripts 01–04)
