@@ -11,12 +11,13 @@ Closes #<!-- issue number -->
 - [ ] Bug fix
 - [ ] New feature / enhancement
 - [ ] Documentation update
+- [ ] Infrastructure / CI change
 - [ ] Refactor (no functional change)
 - [ ] Other: 
 
 ## Testing Done
 
-<!-- How did you test this? Against which Azure Local version, OS, and cluster configuration? -->
+<!-- How did you test this? What environment, configuration, and scenarios? -->
 
 - Azure Local version:
 - Guest OS tested:
@@ -28,5 +29,6 @@ Closes #<!-- issue number -->
 - [ ] I have tested this in a non-production environment
 - [ ] I have updated the README or `docs/` if usage changed
 - [ ] I have added an entry to `CHANGELOG.md` under `[Unreleased]`
-- [ ] My code follows the PowerShell style guidelines in `CONTRIBUTING.md`
+- [ ] My code follows the project's style guidelines in `CONTRIBUTING.md`
+- [ ] My commit messages follow [Conventional Commits](https://www.conventionalcommits.org/)
 - [ ] I have not committed any log files, CSV exports, or VHDX backups
