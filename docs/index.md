@@ -1,5 +1,8 @@
 # Azure Local VM Conversion Toolkit
 
+!!! warning "Under Active Development"
+    This repository is a work in progress. Scripts, templates, and automation are **not guaranteed to work** at this time. Use at your own risk and expect breaking changes.
+
 Convert Gen 1 virtual machines to Gen 2 on Azure Local and Hyper-V environments.
 
 ## Overview
