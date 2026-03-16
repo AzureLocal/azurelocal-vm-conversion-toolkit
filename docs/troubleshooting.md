@@ -1,0 +1,156 @@
+# Troubleshooting
+
+---
+
+## VM Won't Boot After Gen 2 Conversion { #vm-wont-boot }
+
+**Symptom:** VM powers on but fails to boot, shows a black screen or UEFI shell.
+
+**Steps:**
+
+1. Disable Secure Boot first and retry:
+
+    ```powershell
+    Set-VMFirmware -VMName 'VMName' -EnableSecureBoot Off
+    Start-VM -VMName 'VMName'
+    ```
+
+1. Check the UEFI boot order — the VHDX must be listed first:
+
+    ```powershell
+    Get-VMFirmware -VMName 'VMName' | Select-Object -ExpandProperty BootOrder
+    ```
+
+    If another device is first, reorder:
+
+    ```powershell
+    $firmware = Get-VMFirmware -VMName 'VMName'
+    $hdd = $firmware.BootOrder | Where-Object { $_.BootType -eq 'Drive' } | Select-Object -First 1
+    Set-VMFirmware -VMName 'VMName' -FirstBootDevice $hdd
+    ```
+
+1. Verify `mbr2gpt.exe` actually completed successfully inside the guest before the VM was shut down. Check `C:\Windows\setupact.log` by mounting the VHDX offline:
+
+    ```powershell
+    Mount-VHD -Path "C:\ClusterStorage\Volume01\...\VMName_OS.vhdx" -ReadOnly
+    ```
+
+1. If you need to roll back, the original VHDX backup is in `WorkingDirectory\Backups\VMName\`.
+
+---
+
+## mbr2gpt.exe Fails Validation { #mbr2gpt-fails-validation }
+
+**Symptom:** `02-Convert-MBRtoGPT.ps1` exits with a validation error.
+
+**Most common cause:** Too many primary partitions. `mbr2gpt.exe` requires the boot disk to have **3 or fewer primary partitions** with no extended/logical partitions.
+
+**Check inside the guest VM:**
+
+```powershell
+# View current partition layout
+Get-Disk | Get-Partition | Format-Table -AutoSize
+
+# Check detailed setup log
+Get-Content C:\Windows\setupact.log | Select-String -Pattern "MBR2GPT" -Context 2,5
+```
+
+**Fix:** If there are more than 3 primary partitions (e.g., a recovery partition, OEM partition, etc.), you may need to remove non-essential partitions before conversion. Always back up data first.
+
+---
+
+## Arc Registration Doesn't Happen Automatically { #arc-registration }
+
+**Symptom:** After Gen 2 conversion and VM boot, the VM doesn't appear in the Azure portal within 10 minutes.
+
+!!! note
+    **This section applies to Path 1 (Azure Local) only.** On Path 1, VM Arc projection is performed explicitly by running `05-Reconnect-AzureLocalVM.ps1` — it does not happen automatically after `03-Convert-Gen1toGen2.ps1`. If script 05 fails or the VM does not appear in the portal, use the steps below. Path 2 (Hyper-V) has no Azure integration — this section does not apply.
+
+!!! important
+    On Azure Local, VM Arc enrollment is managed entirely by the **platform** — specifically the Azure Arc resource bridge and the VM Config Agent running on the host node. There is no in-guest Connected Machine agent to re-register. You cannot re-register Arc from inside the guest VM.
+
+**Step 1:** Restart the VM Config Agent on the Azure Local **host node** (not inside the guest):
+
+```powershell
+Restart-Service HostAgentService -Force
+```
+
+**Step 2:** Verify the Arc resource bridge is healthy in the Azure portal:
+
+- Navigate to your Azure Local resource → **Overview** → confirm **Azure Arc** shows as **Connected**
+- If the Arc resource bridge shows as degraded or disconnected, the VM cannot be Arc-projected until the bridge is restored
+
+**Step 3:** Check the VM Config Agent logs on the host node:
+
+```powershell
+Get-EventLog -LogName Application -Source "Microsoft-AzureStack-HCI-GuestAgent" -Newest 20
+```
+
+**Step 4:** Use the manual fallback command logged by `03-Convert-Gen1toGen2.ps1` at the end of its run. It logs a full `az stack-hci-vm create` command you can re-run to re-project the VM resource into Azure.
+
+!!! note
+    This fallback applies to **Path 1 (Azure Local)** only. Re-running `05-Reconnect-AzureLocalVM.ps1` directly is generally preferred over this manual fallback command.
+
+**Step 5:** If the VM still doesn't appear after 15 minutes with the resource bridge healthy, delete the stale Arc VM resource from Azure (if one exists) and re-run `05-Reconnect-AzureLocalVM.ps1` (**Path 1**, preferred) or re-run the `az stack-hci-vm create` fallback command logged by script 03 (**Path 1**, manual fallback). Both options apply to **Path 1 (Azure Local)** only.
+
+---
+
+## Legacy NIC Warnings { #legacy-nic-warnings }
+
+**Symptom:** Script logs warn that legacy/emulated NICs were skipped.
+
+**Explanation:** Gen 2 VMs do not support legacy (emulated) network adapters — only synthetic (vmbus) NICs. The scripts automatically skip legacy adapters and only carry over synthetic ones.
+
+**Fix:** If the guest OS was relying on a legacy NIC driver for network connectivity, ensure **Hyper-V Integration Services** are fully installed inside the guest before conversion. After conversion, the guest will communicate over the synthetic NIC only.
+
+---
+
+## Linux VMs { #linux-vms }
+
+Linux VMs require additional manual steps — the scripts handle the Hyper-V/cluster side but GRUB must be reconfigured manually for UEFI boot.
+
+**General steps after Gen 2 recreation:**
+
+1. Boot the VM — it will likely fail to boot from disk initially
+1. Boot from an ISO (attach a Linux live image as a Gen 2 DVD)
+1. Mount the existing root partition
+1. Reinstall/reconfigure GRUB for UEFI:
+
+    ```bash
+    # Example for Ubuntu/Debian (run from live environment chroot)
+    mount /dev/sda2 /mnt
+    mount --bind /dev /mnt/dev
+    mount --bind /proc /mnt/proc
+    mount --bind /sys /mnt/sys
+    chroot /mnt
+    grub-install --target=x86_64-efi --efi-directory=/boot/efi
+    update-grub
+    ```
+
+1. Disable Secure Boot in Hyper-V firmware settings if the Linux distro doesn't have a signed bootloader
+
+---
+
+## Rolling Back a Failed Conversion { #rolling-back-a-failed-conversion }
+
+Each VM's VHDX files are backed up to `WorkingDirectory\Backups\VMName\` before the Gen 1 VM is removed.
+
+To restore:
+
+```powershell
+# 1. Remove the (broken) Gen 2 VM if it exists
+Remove-VM -VMName 'VMName' -Force
+
+# 2. Recreate the Gen 1 VM with original config
+# Use the exported config from WorkingDirectory\Configs\VMName_config.json to reconstruct parameters
+New-VM -Name 'VMName' -Generation 1 -MemoryStartupBytes <bytes> -SwitchName '<switch>'
+
+# 3. Attach the backup VHDX
+Add-VMHardDiskDrive -VMName 'VMName' -Path 'WorkingDirectory\Backups\VMName\VMName_OS.vhdx'
+
+# 4. Re-add to cluster
+Add-ClusterVirtualMachineRole -VMName 'VMName'
+
+# 5. Start VM
+Start-VM -VMName 'VMName'
+```

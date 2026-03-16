@@ -1,0 +1,72 @@
+site_name: Azure Local VM Conversion Toolkit
+site_description: Convert Gen 1 virtual machines to Gen 2 on Azure Local and Hyper-V
+site_url: https://azurelocal.github.io/azurelocal-vm-conversion-toolkit/
+repo_url: https://github.com/AzureLocal/azurelocal-vm-conversion-toolkit
+repo_name: AzureLocal/azurelocal-vm-conversion-toolkit
+
+theme:
+  name: material
+  palette:
+    - scheme: default
+      primary: blue
+      accent: light blue
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+    - scheme: slate
+      primary: blue
+      accent: light blue
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+  features:
+    - navigation.tabs
+    - navigation.sections
+    - navigation.top
+    - navigation.footer
+    - content.code.copy
+    - content.code.annotate
+    - search.suggest
+    - search.highlight
+  icon:
+    repo: fontawesome/brands/github
+
+nav:
+  - Home: index.md
+  - Getting Started: getting-started.md
+  - Gen 1 vs Gen 2: gen1-vs-gen2.md
+  - Prerequisites: prerequisites.md
+  - Runbooks:
+      - Azure Local Path: runbook-azurelocal.md
+      - Hyper-V Path: runbook-hyperv.md
+  - Troubleshooting: troubleshooting.md
+  - Contributing: contributing.md
+
+markdown_extensions:
+  - admonition
+  - pymdownx.details
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.inlinehilite
+  - pymdownx.tabbed:
+      alternate_style: true
+  - pymdownx.snippets
+  - tables
+  - toc:
+      permalink: true
+  - attr_list
+  - md_in_html
+
+plugins:
+  - search
+
+extra:
+  social:
+    - icon: fontawesome/brands/github
+      link: https://github.com/AzureLocal
+  homepage: https://azurelocal.cloud

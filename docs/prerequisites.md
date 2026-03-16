@@ -1,0 +1,137 @@
+# Prerequisites
+
+Before running any conversion scripts, ensure the following requirements are met.
+
+---
+
+## Azure Local Cluster
+
+| Requirement | Details |
+|---|---|
+| **Version** | 23H2 recommended; 22H2 supported |
+| **Cluster health** | All nodes healthy, no active cluster events |
+| **CSV availability** | Sufficient free space on the target CSV (~1x total VHDX size of VMs being converted) |
+| **Maintenance window** | Each VM will be offline from shutdown through Gen 2 first boot (typically 5–15 minutes plus VHDX backup time) |
+
+---
+
+## PowerShell Modules
+
+### Hyper-V Path (`scripts/hyperv/`)
+
+Only built-in Windows Server modules are required:
+
+```powershell
+# Verify both are available (they ship with Windows Server)
+Get-Module -ListAvailable Hyper-V, FailoverClusters
+```
+
+| Module | Purpose |
+|---|---|
+| `Hyper-V` | VM management (built into Windows Server) |
+| `FailoverClusters` | Cluster role management (built into Windows Server) |
+
+### Azure Local Path (`scripts/azurelocal/`)
+
+All of the above, plus the Az modules:
+
+```powershell
+# Check installed modules
+Get-Module -ListAvailable Az.Accounts, Az.Resources, Az.StackHCI, Az.ConnectedMachine
+
+# Install Az modules if missing
+Install-Module -Name Az.Accounts, Az.Resources, Az.StackHCI, Az.ConnectedMachine -Scope CurrentUser -Force
+```
+
+| Module | Purpose |
+|---|---|
+| `Az.Accounts` | Azure authentication |
+| `Az.Resources` | Azure resource management |
+| `Az.StackHCI` | Azure Local / Stack HCI registration |
+| `Az.ConnectedMachine` | Azure Arc connected machine management |
+
+---
+
+## Azure CLI (Azure Local Path Only)
+
+Not required for `scripts/hyperv/`. Required for `scripts/azurelocal/` for two purposes:
+
+- `03-Convert-Gen1toGen2.ps1` — logs a manual `az stack-hci-vm create` fallback command if Arc auto-registration times out
+- `05-Reconnect-AzureLocalVM.ps1` — calls `az stack-hci-vm reconnect-to-azure` to project the Gen 2 VM into the Azure portal
+
+```powershell
+# Verify Azure CLI is installed
+az --version
+
+# Install the Stack HCI VM extension
+az extension add --name stack-hci-vm
+
+# Verify
+az extension list --query "[?name=='stack-hci-vm']"
+```
+
+---
+
+## Azure Permissions
+
+On Azure Local, VMs are Arc-projected by the platform through the Azure Arc resource bridge — not through an in-guest Connected Machine agent. The `Azure Connected Machine Resource Administrator` role applies to traditional Arc-enabled servers and is **not** used here.
+
+The account running the scripts needs the following Azure Stack HCI roles on the target Azure Local instance or resource group:
+
+| Role | Reason |
+|---|---|
+| **Azure Stack HCI Administrator** | Required to register the system, create shared resources (logical networks, VM images, storage paths), and assign roles to other users. Use this role for the account running conversion scripts. |
+| **Azure Stack HCI VM Contributor** | Sufficient for creating, deleting, starting, and stopping VMs and their attached resources. Use this role for scoped service accounts that don't need cluster-level access. |
+
+To verify or assign roles:
+
+```powershell
+# In the Azure portal: go to your Azure Local resource
+# > Access control (IAM) > Role assignments
+# Assign 'Azure Stack HCI Administrator' to the account running the scripts
+
+# Verify current Azure login
+Connect-AzAccount
+Get-AzContext
+```
+
+---
+
+## Guest VM Requirements
+
+For each VM being converted, the guest OS must meet these requirements before running `02-Convert-MBRtoGPT.ps1`:
+
+| Requirement | Details |
+|---|---|
+| **OS bitness** | 64-bit only — `mbr2gpt.exe` does not support 32-bit Windows |
+| **Windows version** | Windows Server 2012 R2+ or Windows 10+ (build 10.0.14393+) |
+| **Partition count** | Maximum 3 primary partitions on the boot disk |
+| **Partition type** | No extended or logical partitions on the boot disk |
+| **Integration Services** | Hyper-V Integration Services installed and current (required for synthetic NIC handoff) |
+| **Linux** | See [Linux VMs](troubleshooting.md#linux-vms) — requires manual GRUB reconfiguration |
+
+### Checking mbr2gpt Compatibility Inside a Guest
+
+```powershell
+# Run inside the guest VM — validates without making changes
+.\02-Convert-MBRtoGPT.ps1 -ValidateOnly
+```
+
+If validation fails, check `C:\Windows\setupact.log` inside the guest for detailed diagnostics.
+
+---
+
+## Finding Required Azure Resource IDs
+
+You'll need these IDs for scripts 03 and 04:
+
+```powershell
+# Custom Location ID
+az customlocation list --resource-group "rg-azurelocal-prod" --query "[].id" -o tsv
+
+# Logical Network ID
+az stack-hci-vm network lnet list --resource-group "rg-azurelocal-prod" --query "[].id" -o tsv
+
+# Subscription ID
+az account show --query id -o tsv
+```

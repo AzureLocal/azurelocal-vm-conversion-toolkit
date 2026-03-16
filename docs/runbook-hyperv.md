@@ -1,0 +1,155 @@
+# Runbook: Hyper-V Cluster Path
+
+!!! note
+    **This runbook covers the Hyper-V Cluster path (scripts 01–04).** It converts a Gen 1 VM into a Gen 2 Hyper-V VM on the same cluster node. The resulting VM is managed directly through Hyper-V and does not appear as an `Microsoft.AzureStackHCI/virtualMachineInstances` resource in the Azure portal. If you need a portal-managed Azure Local VM, see [Runbook: Azure Local VM Path](runbook-azurelocal.md).
+
+This guide walks through running the Azure Local VM Conversion Toolkit from start to finish.
+
+!!! warning
+    Ensure all prerequisites are satisfied before you begin. See [Prerequisites](prerequisites.md).
+
+---
+
+## Workflow Overview
+
+```
+  ┌──────────────────────────────────────────────────┐
+  │  01 - Setup Environment                          │
+  │  Run on: Cluster node                            │
+  │  Inventories Gen 1 VMs, exports configs          │
+  └────────────────────┬─────────────────────────────┘
+                       │
+                       ▼
+  ┌──────────────────────────────────────────────────┐
+  │  02 - Convert MBR → GPT                          │
+  │  Run on: Inside each guest VM                    │
+  │  Converts boot disk partition table              │
+  │                                                  │
+  │  ⚠️  SHUT DOWN the VM after this step!            │
+  │     Do NOT reboot — it won't boot as Gen 1.      │
+  └────────────────────┬─────────────────────────────┘
+                       │
+                       ▼
+  ┌──────────────────────────────────────────────────┐
+  │  03 - Convert Gen 1 → Gen 2                      │
+  │  Run on: Cluster node (per VM)                   │
+  │  Backs up VHDXs, removes Gen 1, creates Gen 2,  │
+  │  re-attaches disks, re-adds to cluster           │
+  └────────────────────┬─────────────────────────────┘
+                       │
+                       ▼
+  ┌──────────────────────────────────────────────────┐
+  │  04 - Batch Orchestrator (Optional)              │
+  │  Run on: Cluster node                            │
+  │  Processes multiple VMs sequentially with        │
+  │  pre-flight checks and summary reporting         │
+  └──────────────────────────────────────────────────┘
+```
+
+---
+
+## Step 1: Setup the Environment
+
+Run once per cluster before starting any conversions. This validates cluster health, inventories all Gen 1 VMs, and exports their configurations to the working directory.
+
+```powershell
+.\scripts\hyperv\01-Setup-ConversionEnvironment.ps1 `
+    -ClusterName "HV-Cluster01" `
+    -WorkingDirectory "C:\ClusterStorage\Volume01\Gen2Conversion"
+```
+
+This creates the working directory structure and exports a `Gen1_VM_Inventory_YYYYMMDD.csv` plus a `_config.json` for each VM.
+
+---
+
+## Step 2: Convert MBR → GPT (Inside Each Guest VM)
+
+This step must be performed **inside each guest VM** before its Gen 1 configuration is removed.
+
+Copy `scripts/hyperv/02-Convert-MBRtoGPT.ps1` into the guest VM and run it:
+
+```powershell
+# Validate first (dry run — no changes made)
+.\02-Convert-MBRtoGPT.ps1 -ValidateOnly
+
+# Perform the conversion
+.\02-Convert-MBRtoGPT.ps1
+```
+
+!!! caution
+    Shut down the VM immediately after — do **NOT** reboot. The disk is now GPT but the VM is still Gen 1. Rebooting will fail.
+
+```powershell
+Stop-Computer -Force
+```
+
+If validation fails, check `C:\Windows\setupact.log` inside the guest. See [mbr2gpt fails validation](troubleshooting.md#mbr2gpt-fails-validation) for common fixes.
+
+---
+
+## Step 3: Convert Gen 1 → Gen 2
+
+Run from the cluster node after the guest VM is shut down.
+
+!!! note
+    This step **deletes** the Gen 1 Hyper-V VM object entirely and creates a brand new Gen 2 VM object in its place. The existing VHDX disk files are preserved and reattached — your workload data is not touched — but the VM configuration itself is destroyed and rebuilt. This is why a VHDX backup is taken first and why this operation is irreversible without that backup.
+
+Specifically, the script:
+
+1. Captures all settings (CPU, memory, NIC, VLAN, disk paths) from the Gen 1 VM
+1. Backs up the VHDX files to `WorkingDirectory\Backups\`
+1. Removes the Gen 1 VM from the failover cluster and Hyper-V (`Remove-VM`) — the VM config is gone at this point
+1. Creates a new Gen 2 VM (`New-VM -Generation 2`) with the same name
+1. Reattaches the original VHDX files to the new VM
+1. Reapplies all captured settings (CPU, memory, NICs, Secure Boot, etc.)
+1. Re-adds the VM to the failover cluster
+
+```powershell
+.\scripts\hyperv\03-Convert-Gen1toGen2.ps1 `
+    -VMName "WebServer01" `
+    -WorkingDirectory "C:\ClusterStorage\Volume01\Gen2Conversion"
+```
+
+---
+
+## Step 4: Batch Convert Multiple VMs (Optional)
+
+Use the batch orchestrator to process multiple VMs sequentially with pre-flight checks and a summary report.
+
+```powershell
+.\scripts\hyperv\04-Batch-ConvertVMs.ps1 `
+    -WorkingDirectory "C:\ClusterStorage\Volume01\Gen2Conversion" `
+    -VMNames @("WebServer01", "SQLServer01", "AppServer01")
+```
+
+---
+
+## Working Directory Structure
+
+The toolkit creates an organized working directory on your CSV:
+
+```
+WorkingDirectory/
+├── Backups/                          # VHDX backup copies (per VM)
+│   └── WebServer01/
+│       └── WebServer01_OS.vhdx
+├── Configs/                          # VM configuration exports
+│   ├── Gen1_VM_Inventory_YYYYMMDD.csv
+│   └── WebServer01_config.json
+├── Logs/                             # Conversion logs and reports
+│   ├── ConversionSetup_*.log
+│   ├── Gen2Convert_WebServer01_*.log
+│   └── BatchReport_*.csv
+├── Temp/
+└── Scripts/
+```
+
+---
+
+## Important Notes
+
+- **Downtime**: Each VM has downtime from shutdown through Gen 2 first boot — typically 5–15 minutes plus VHDX backup time
+- **Rollback**: VHDX backups enable rollback — recreate the Gen 1 VM and attach the backup copies. See [Rolling Back a Failed Conversion](troubleshooting.md#rolling-back-a-failed-conversion)
+- **Linux VMs**: May need Secure Boot disabled and GRUB reconfigured for UEFI boot. See [Linux VMs](troubleshooting.md#linux-vms)
+- **Disk space**: Plan for approximately 1x total VHDX size for backups
+- **Test first**: Always convert a non-critical VM first to validate the process in your environment

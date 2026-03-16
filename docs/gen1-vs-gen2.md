@@ -1,0 +1,147 @@
+# Gen 1 vs Gen 2: Should You Convert?
+
+!!! warning
+    **Read this before running anything.** Conversion is a destructive, one-way operation. This document is intended to help you make an informed decision — and in most cases, the right answer is **not** to convert.
+
+---
+
+## The Short Answer
+
+If your Gen 1 VM is running, stable, and serving its workload without issues — **leave it alone.**
+
+Conversion carries real risk: downtime, potential boot failures, broken Arc registration, and no clean rollback path (only VHDX backup-based restore). The process is not officially supported by Microsoft as an in-place upgrade path. This toolkit automates a manual workaround, not a first-class migration feature.
+
+**The only reason to convert is if you need a specific Gen 2 capability that is unavailable to Gen 1 and cannot be obtained any other way.**
+
+---
+
+## The Better Alternative: Deploy New and Migrate
+
+Before considering conversion, seriously evaluate this approach:
+
+1. **Deploy a new Gen 2 VM** on Azure Local with the correct configuration
+1. **Install the OS and applications fresh**, or restore from a backup
+1. **Migrate the workload** — data, configuration, DNS/IP cutover
+1. **Decommission the Gen 1 VM** once the new VM is verified
+
+This path is:
+
+- **Lower risk** — the Gen 1 VM stays running until the new VM is confirmed good
+- **Cleaner** — no partition table surgery, no firmware mode switch mid-flight
+- **Reversible** — you can roll back simply by pointing traffic back to the old VM
+- **Better for the long term** — fresh OS installs avoid accumulated configuration drift
+
+Conversion should only be considered when a fresh deployment is genuinely not feasible — for example, a complex stateful application with no reliable migration path or licensing tied to the existing machine identity.
+
+---
+
+## What Gen 2 Actually Adds
+
+Gen 2 unlocks the following capabilities. Review this list honestly against your requirements.
+
+| Feature | Gen 1 | Gen 2 |
+|---|---|---|
+| Boot firmware | BIOS (legacy) | UEFI — required for Secure Boot, Trusted Launch, and boot integrity |
+| Secure Boot | ✗ Not supported | ✓ Available — enforces signed bootloaders and boot chain |
+| vTPM (virtual TPM 2.0) | ✗ Not supported | ✓ Available — required for BitLocker, Windows 11, Secured-core VM profile |
+| Trusted Launch | ✗ Not supported | ✓ Available on Azure Local 23H2+ — vTPM + Secure Boot combined |
+| Boot disk size | 2 TB maximum (MBR limit) | >2 TB supported (GPT) |
+| Boot controller | IDE (emulated, slower) | SCSI — faster, no 2-disk IDE limit |
+| Network boot (PXE) | Emulated legacy NIC | Synthetic NIC (faster, more reliable) |
+| Legacy NIC support | ✓ Available | ✗ Not supported — synthetic NICs only |
+| 32-bit OS support | ✓ Supported | ✗ Not supported — 64-bit only |
+
+### Honest Assessment
+
+Most production Windows Server workloads running on Gen 1 today work fine and will continue to work fine. The features Gen 2 adds are valuable for **new** deployments but are rarely worth the conversion risk for an existing stable VM unless one of the following is true:
+
+- You need **vTPM** for BitLocker or a Secured-core VM compliance requirement
+- You need **Secure Boot** for a regulatory or security policy mandate
+- Your boot disk is approaching **2 TB** and needs to grow beyond it
+- You are being blocked from a specific Azure Local feature that is **explicitly Gen 2-only**
+
+If none of those apply to your VM, stay on Gen 1.
+
+---
+
+## Azure Local-Specific Considerations
+
+### Arc Registration
+
+Gen 2 VMs on Azure Local 23H2+ benefit from automatic Arc enrollment via the VM Config Agent. Gen 1 VMs can also be Arc-registered — this is **not** a Gen 2-exclusive feature. Do not convert just for Arc management.
+
+### Live Migration and Clustering
+
+Both Gen 1 and Gen 2 VMs are fully supported in Azure Local failover clusters. Generation has no impact on live migration, cluster-aware updating, or VM availability.
+
+### Azure Local 23H2 New VM Defaults
+
+All new VMs created through the Azure portal or ARM on Azure Local 23H2+ are Gen 2 by default. This is another reason to prefer deploying new over converting — you get Gen 2 correctly from day one without surgery.
+
+### Support Lifecycle
+
+Microsoft has not announced end-of-support or end-of-life for Gen 1 VMs on Azure Local. Gen 1 support is not being removed in the near term. Do not convert based on fear of Gen 1 being deprecated — verify this against current Microsoft documentation before making any decision.
+
+---
+
+## Decision Checklist
+
+Use this checklist before proceeding with conversion:
+
+| Check | Question |
+|---|---|
+| [ ] | Does this VM need vTPM, Secure Boot, or Trusted Launch specifically? |
+| [ ] | Is the boot disk at or near 2 TB and needs to grow? |
+| [ ] | Is there a documented policy or compliance requirement that explicitly requires Gen 2? |
+| [ ] | Have you confirmed the Gen 2 feature you need cannot be met by deploying a new VM and migrating? |
+| [ ] | Have you backed up all VHDXs and tested restore? |
+| [ ] | Have you validated `mbr2gpt.exe` compatibility in the guest with `-ValidateOnly`? |
+| [ ] | Do you have a maintenance window and a rollback plan? |
+| [ ] | Have you tested the process on a **non-production** VM first? |
+
+If you cannot check every box, stop and re-evaluate.
+
+---
+
+## Choosing a Path
+
+If you have decided to proceed with conversion, there are two distinct paths depending on your end goal. Choose the one that matches your requirements before running any scripts.
+
+| Consideration | Path 1 — Azure Local VM | Path 2 — Hyper-V Cluster |
+|---|---|---|
+| **Scripts used** | 01, 02, 03, 05 | 01, 02, 03 (or 04 for batch) |
+| **Result** | `Microsoft.AzureStackHCI/virtualMachineInstances` resource | Hyper-V Gen 2 VM on the cluster node |
+| **Visible in Azure portal** | Fully managed Azure Local VM (VM blade, metrics, extensions) | Arc-registered VM (compute view only) |
+| **Workload preserved?** | ✓ Yes — no Sysprep, no identity loss | ✓ Yes — existing OS, apps, and domain join intact |
+| **Machine SID / domain join** | ✓ Preserved | ✓ Preserved |
+| **Downtime** | 5–15 minutes + VHDX backup time (reconnect step adds minimal time, no additional downtime) | 5–15 minutes + VHDX backup time |
+| **Rollback** | VHDX backup restore; reconnect can be undone by deleting the Azure resource (Hyper-V VM is unaffected) | VHDX backup restore |
+| **Management plane** | Azure portal / Azure CLI / ARM | Hyper-V Manager / Failover Cluster Manager |
+| **Arc projection** | Automatic via Arc resource bridge after `reconnect-to-azure` | Manual or via existing cluster Arc registration |
+| **Key command** | `az stack-hci-vm reconnect-to-azure` (script 05) — Preview | `New-VM -Generation 2` (script 03) |
+| **Best for** | VMs that must be managed from the Azure portal alongside other Azure Local resources | VMs that need minimal downtime and Hyper-V-only management |
+
+### Use Path 1 (Azure Local VM) if:
+
+- You need the VM to appear as a full `Microsoft.AzureStackHCI/virtualMachineInstances` resource
+- You are standardizing on portal-managed Azure Local VMs going forward
+- You need Azure portal operations on the VM (start/stop, extensions, RBAC, monitoring)
+- You are managing a fleet and want a single pane of glass in the Azure portal
+
+### Use Path 2 (Hyper-V) if:
+
+- You need the VM managed through Hyper-V Manager and Failover Cluster Manager only
+- Portal-based VM management is not a requirement
+- You want the simplest possible path — no Azure CLI dependencies
+
+!!! note
+    Both paths are workload-preserving. Path 1 adds one extra step (`reconnect-to-azure`) after the Gen 2 conversion — it does not require Sysprep or any identity-destructive operation.
+
+---
+
+## Proceed to Conversion
+
+If you have worked through this document and decided conversion is the right path, choose your runbook:
+
+- [Runbook: Azure Local VM Path](runbook-azurelocal.md) — workload-preserving, portal-managed VM, scripts 01–03, 05
+- [Runbook: Hyper-V Cluster Path](runbook-hyperv.md) — workload-preserving, scripts 01–04
