@@ -48,6 +48,16 @@ Use the [feature request issue template](.github/ISSUE_TEMPLATE/feature_request.
 - At minimum, run `.\01-Setup-ConversionEnvironment.ps1` against a real cluster to validate your changes don't break inventory/export
 - Test `.\02-Convert-MBRtoGPT.ps1 -ValidateOnly` inside a guest VM before testing the full conversion
 
+## Standards
+
+This project follows the **org-wide AzureLocal standards** documented at [azurelocal.cloud/standards](https://azurelocal.cloud/standards/). Key references:
+
+- [Repository Structure](https://azurelocal.cloud/standards/repo-structure) — Required files, directories, labels, branch naming
+- [Scripting Standards](https://azurelocal.cloud/standards/scripting/scripting-standards) — PowerShell conventions
+- [Documentation Standards](https://azurelocal.cloud/standards/documentation/documentation-standards) — Writing and formatting
+- [Variable Management](https://azurelocal.cloud/docs/implementation/04-variable-management-standard) — Config file patterns
+- [Fictional Company Policy](https://azurelocal.cloud/standards/fictional-company-policy) — Use IIC, never Contoso
+
 ## Code of Conduct
 
 Be respectful and constructive. This is a small project focused on solving a real operational problem — keep discussions on-topic and collaborative.
