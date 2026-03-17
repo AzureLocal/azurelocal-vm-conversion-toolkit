@@ -1,0 +1,40 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://github.com/AzureLocal/azurelocal-vm-conversion-toolkit/config/schema/variables.schema.json",
+  "title": "VM Conversion Toolkit Variables",
+  "description": "Schema for config/variables.example.yml — validates required sections and key structure.",
+  "type": "object",
+  "required": ["azure", "azure_local", "conversion", "tags"],
+  "properties": {
+    "azure": {
+      "type": "object",
+      "required": ["subscription_id", "resource_group", "location"],
+      "properties": {
+        "subscription_id": { "type": "string" },
+        "resource_group": { "type": "string" },
+        "location": { "type": "string" }
+      }
+    },
+    "azure_local": {
+      "type": "object",
+      "required": ["custom_location_id", "logical_network_id"],
+      "properties": {
+        "custom_location_id": { "type": "string" },
+        "logical_network_id": { "type": "string" }
+      }
+    },
+    "conversion": {
+      "type": "object",
+      "required": ["working_directory"],
+      "properties": {
+        "working_directory": { "type": "string" },
+        "max_parallel": { "type": "integer", "minimum": 1 }
+      }
+    },
+    "tags": {
+      "type": "object",
+      "additionalProperties": { "type": "string" }
+    }
+  },
+  "additionalProperties": false
+}
