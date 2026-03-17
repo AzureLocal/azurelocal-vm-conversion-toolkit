@@ -4,6 +4,9 @@ Backups/
 Temp/
 Configs/
 
+# User-specific config (actual values — never commit)
+config/variables.yml
+
 # Log and report files
 *.log
 *.csv
