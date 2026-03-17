@@ -1,0 +1,48 @@
+# =============================================================================
+# variables.example.yml
+# Central variable reference for VM Gen1-to-Gen2 conversion scripts.
+#
+# Copy this file to variables.yml and fill in your values:
+#   cp config/variables.example.yml config/variables.yml
+#
+# DO NOT commit variables.yml — it is excluded by .gitignore.
+#
+# NOTE: These scripts currently accept parameters directly on the command line.
+# This file documents the common values you will need across all scripts.
+# Future versions may support loading from this file directly.
+# =============================================================================
+
+
+# =============================================================================
+# Azure
+# =============================================================================
+azure:
+  subscription_id: "00000000-0000-0000-0000-000000000000"
+  resource_group: "rg-azurelocal-prod"
+  location: "eastus"
+
+
+# =============================================================================
+# Azure Local
+# =============================================================================
+azure_local:
+  custom_location_id: "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-azurelocal/providers/Microsoft.ExtendedLocation/customLocations/cl-azurelocal-01"
+  logical_network_id: "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-azurelocal/providers/Microsoft.AzureStackHCI/logicalNetworks/lnet-mgmt-01"
+
+
+# =============================================================================
+# Conversion Settings
+# =============================================================================
+conversion:
+  working_directory: "C:\\ClusterStorage\\Volume01\\Gen2Conversion"
+  max_parallel: 1                             # VMs to process in parallel (1 = sequential)
+
+
+# =============================================================================
+# Tags
+# =============================================================================
+tags:
+  project: "VM-Conversion"
+  environment: "production"
+  workload: "gen1-to-gen2"
+  solution: "vmconvert-azure-local"
