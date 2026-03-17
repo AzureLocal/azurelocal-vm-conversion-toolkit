@@ -40,6 +40,8 @@ nav:
       - Azure Local Path: runbook-azurelocal.md
       - Hyper-V Path: runbook-hyperv.md
   - Troubleshooting: troubleshooting.md
+  - Reference:
+      - Variable Reference: reference/variables.md
   - Contributing: contributing.md
 
 markdown_extensions:
