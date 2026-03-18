@@ -8,7 +8,7 @@
 
 ## Overview
 
-This standard defines how automation tools interoperate within the VM Conversion Toolkit. Scripts support both Azure Local and Hyper-V paths using a shared configuration source.
+This standard defines how multiple automation tools (Terraform, Bicep, ARM, PowerShell, Ansible) interoperate across AzureLocal solutions. All tools share a single configuration source and must produce identical infrastructure.
 
 ---
 
@@ -16,32 +16,42 @@ This standard defines how automation tools interoperate within the VM Conversion
 
 ```mermaid
 flowchart TB
-    A["config/variables.yml<br/>(single source of truth)"] --> B{Deployment Path}
-    B -->|Azure Local| C[ARM API Calls]
-    B -->|Hyper-V| D[Hyper-V Cmdlets]
-    C --> E[Converted Gen 2 VM]
-    D --> E
+    A["config/variables.yml<br/>(single source of truth)"] --> B[Terraform .tfvars]
+    A --> C[Bicep .bicepparam]
+    A --> D[ARM parameters.json]
+    A --> E[PowerShell ConvertFrom-Yaml]
+    A --> F[Ansible group_vars]
+    B --> G[Identical Infrastructure]
+    C --> G
+    D --> G
+    E --> G
+    F --> G
 ```
 
 ---
 
-## Tool Integration
+## Deployment Path Matrix
 
-| Tool | Azure Local Path | Hyper-V Path |
-|------|:---:|:---:|
-| **PowerShell (Az module)** | ✅ | — |
-| **PowerShell (Hyper-V module)** | — | ✅ |
-| **Azure CLI** | ✅ | — |
+| Tool | Azure Resources | Configuration | Monitoring | Scaling |
+|------|:---:|:---:|:---:|:---:|
+| **Terraform** | ✅ | Delegates | ✅ | ✅ |
+| **Bicep** | ✅ | Delegates | ✅ | ✅ |
+| **ARM** | ✅ | Delegates | ✅ | — |
+| **PowerShell** | ✅ | ✅ | ✅ | ✅ |
+| **Ansible** | ✅ | ✅ | ✅ | ✅ |
+
+!!! warning "Delegates"
+    "Delegates" means the IaC tool provisions Azure resources but does not configure the guest OS or application layer. A separate tool (PowerShell or Ansible) handles guest configuration.
 
 ---
 
 ## Interoperability Rules
 
-1. **Single source of truth** — `config/variables.yml` is the only config file. Both runbook paths read from it.
-2. **Shared schema** — Azure Local and Hyper-V paths share the same variable schema but differ in which variables are required.
-3. **Idempotency** — All scripts must detect existing Gen 2 VMs and skip.
-4. **Safety** — Always checkpoint before conversion; never modify running VMs.
-5. **Logging** — All operations logged with consistent format.
+1. **Single source of truth** — `config/variables.yml` is the only config file. All tool-specific parameter files are derived.
+2. **Identical output** — Given the same config, every tool must produce the same infrastructure.
+3. **Idempotency** — All scripts and templates must be safe to re-run.
+4. **Error handling** — Every tool must validate config before executing changes.
+5. **Logging** — All operations logged to `./logs/` with consistent format.
 
 ---
 

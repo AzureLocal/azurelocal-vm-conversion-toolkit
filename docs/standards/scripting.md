@@ -10,11 +10,12 @@
 
 | Script Type | Pattern | Example |
 |-------------|---------|---------|
-| PowerShell Core | `Verb-Noun.ps1` | `Convert-VMGeneration.ps1` |
-| Azure PowerShell | `Verb-AzResource.ps1` | `Get-AzVM.ps1` |
-| Azure CLI (PowerShell) | `az-verb-resource.ps1` | `az-convert-vm.ps1` |
-| Standalone (no config) | `Verb-Noun-Standalone.ps1` | `Convert-VMGeneration-Standalone.ps1` |
-| Remote/orchestration | `Invoke-<Task>.ps1` | `Invoke-VMConversion.ps1` |
+| PowerShell Core | `Verb-Noun.ps1` | `Deploy-Solution.ps1` |
+| Azure PowerShell | `Verb-AzResource.ps1` | `New-AzKeyVault.ps1` |
+| Azure CLI (PowerShell) | `az-verb-resource.ps1` | `az-deploy-resource.ps1` |
+| Azure CLI (Bash) | `az-verb-resource.sh` | `az-deploy-resource.sh` |
+| Standalone (no config) | `Verb-Noun-Standalone.ps1` | `Deploy-Solution-Standalone.ps1` |
+| Remote/orchestration | `Invoke-<Task>.ps1` | `Invoke-Deployment.ps1` |
 
 ---
 
@@ -22,19 +23,20 @@
 
 | Mode | Config File | Dependencies | Use Case |
 |------|-------------|-------------|----------|
-| Config-driven | `config/variables.yml` | Config loader, helpers | Multi-VM batch conversion |
-| Standalone | Inline `#region CONFIGURATION` or CLI parameters | None | Single VM conversion |
+| Config-driven (Options 2-4) | `config/variables.yml` | Config loader, helpers, Key Vault | Multi-environment automation, CI/CD |
+| Standalone (Option 5) | Inline `#region CONFIGURATION` | None | Demos, single-use, external sharing |
 
 ### Config-Driven Rules
 
 - Read all values from `config/variables.yml` — never hardcode
 - Accept `-ConfigPath` parameter (auto-discover if not provided)
+- Use helper functions: `ConvertFrom-Yaml`, `Resolve-KeyVaultRef`, logging
 
-### Standalone / CLI-Parameter Rules
+### Standalone Rules
 
-- Scripts currently accept parameters on the command line
-- `config/variables.yml` documents canonical values and will be loaded directly in future versions
-- Variable names match `variables.yml` paths
+- All variables in `#region CONFIGURATION` block at top
+- Variable names match `variables.yml` paths (e.g., `$subscription_id`)
+- Zero external dependencies — copy, paste, run
 
 ---
 
@@ -45,11 +47,18 @@
 | Parameter | Type | Default | Purpose |
 |-----------|------|---------|---------|
 | `-ConfigPath` | `[string]` | `""` | Path to `variables.yml` |
-| `-VMName` | `[string]` | — | Target VM to convert |
+| `-Credential` | `[PSCredential]` | `$null` | Override credential resolution |
+| `-TargetNode` | `[string[]]` | `@()` (all) | Limit to specific node(s) |
 | `-WhatIf` | `[switch]` | `$false` | Dry-run mode |
 | `-LogPath` | `[string]` | `""` (auto) | Override log file path |
 
 All `Invoke-` scripts must use `[CmdletBinding()]` to enable `-Verbose` and `-Debug`.
+
+### Credential Resolution Order
+
+1. **`-Credential` parameter** — if passed, use immediately
+2. **Key Vault** — read from config; try `Az.KeyVault`, fall back to `az` CLI
+3. **Interactive prompt** — `Get-Credential` with username pre-filled
 
 ---
 
@@ -61,14 +70,14 @@ All `Invoke-` scripts must use `[CmdletBinding()]` to enable `-Verbose` and `-De
 
 ---
 
-## VM-Conversion-Specific Script Conventions
+## Solution Script Conventions
 
 | Convention | Rule |
 |-----------|------|
-| Dual runbooks | Azure Local path and Hyper-V path share the same variable schema |
-| ARM resource IDs | Azure Local variables use full ARM resource IDs for custom locations and logical networks |
-| Safety | All conversions must checkpoint the VM before modifying disk layout |
-| Idempotency | All scripts must detect existing Gen 2 VMs and skip |
+| IaC tools | Terraform, Bicep, ARM, PowerShell, Ansible |
+| Config source | `config/variables.yml` (single source of truth) |
+| Parameter derivation | All tool-specific param files derived from central config |
+| Idempotency | All scripts must be safe to re-run |
 
 ---
 
@@ -76,4 +85,5 @@ All `Invoke-` scripts must use `[CmdletBinding()]` to enable `-Verbose` and `-De
 
 - [PowerShell Organization Standard](https://azurelocal.cloud/standards/scripting/powershell-organization-standard)
 - [Scripting Framework](https://azurelocal.cloud/standards/scripting/scripting-framework)
+- [Bash Scripting Standards](https://azurelocal.cloud/standards/scripting/bash-scripting-standards)
 - [Automation Interoperability](automation.md)

@@ -8,57 +8,62 @@
 
 ## Overview
 
-Standards for Infrastructure as Code (IaC) and deployment processes for the VM Conversion Toolkit.
+Standards for Infrastructure as Code (IaC), Terraform state management, and deployment processes for AzureLocal solutions.
 
 ---
 
-## Conversion Pipeline
+## Infrastructure Pipeline
 
 ```mermaid
 flowchart LR
-    A[Load Config] --> B[Validate VM State]
-    B --> C[Checkpoint VM]
-    C --> D[Convert Disk Layout]
-    D --> E[Update VM Generation]
-    E --> F[Validate & Boot]
+    A[Generate Variables] --> B[Validate Config]
+    B --> C[Plan Infrastructure]
+    C --> D[Review Changes]
+    D --> E[Apply Changes]
+    E --> F[Update State]
 ```
 
 ---
 
-## VM-Conversion-Specific Infrastructure
+## State Management
 
-| Convention | Rule |
+| Principle | Rule |
 |-----------|------|
-| Primary tooling | PowerShell scripts (CLI-parameter and config-driven) |
-| Config source | `config/variables.yml` (documents canonical values) |
-| Dual paths | Azure Local path uses ARM resource IDs; Hyper-V path uses local cmdlets |
-| Safety | Always checkpoint before conversion; never modify running VMs |
+| Remote state | Store Terraform state in Azure Storage Account |
+| State locking | Enable locking during all operations |
+| Backup | Regular state file backups before destructive operations |
+| Naming | `<solution>-<env>.tfstate` (e.g., `platform-prod.tfstate`) |
 
-### Azure Local Path
+---
 
-| Step | Operation |
-|------|-----------|
-| 1 | Validate VM is Gen 1 and powered off |
-| 2 | Create checkpoint |
-| 3 | Convert disk from MBR to GPT |
-| 4 | Update VM configuration to Gen 2 |
-| 5 | Boot and validate |
+## IaC Tool Parity
 
-### Hyper-V Path
+All tools must produce **identical infrastructure** when given the same configuration values:
 
-| Step | Operation |
-|------|-----------|
-| 1 | Validate VM is Gen 1 and powered off |
-| 2 | Export VM (backup) |
-| 3 | Convert disk from MBR to GPT |
-| 4 | Create new Gen 2 VM with converted disk |
-| 5 | Boot and validate |
+| Tool | Primary Format | State Management |
+|------|---------------|-----------------|
+| Terraform | `.tf` / `.tfvars` | Remote state in Azure Storage |
+| Bicep | `.bicep` / `.bicepparam` | ARM deployment history |
+| ARM | `.json` | ARM deployment history |
+| PowerShell | `.ps1` | Config-driven, logged |
+| Ansible | `.yml` | Inventory-based |
+
+---
+
+## Deployment Phases
+
+| Phase | Scope | Tools |
+|-------|-------|-------|
+| Phase 1: Azure Foundation | Resource groups, networking, Key Vault, storage | Terraform, Bicep, ARM |
+| Phase 2: Compute & Workload | VMs, clusters, workload deployment | Terraform, PowerShell |
+| Phase 3: Configuration | Guest config, monitoring, policies | PowerShell, Ansible |
 
 ---
 
 ## Related Standards
 
 - [Infrastructure Generation & Deployment Process](https://azurelocal.cloud/standards/infrastructure/infrastructure-generation-deployment-process)
+- [State Management](https://azurelocal.cloud/standards/infrastructure/state-management)
 - [Solution Development Standard](solutions.md)
 - [Variable Standards](variables.md)
 - [Automation Interoperability](automation.md)

@@ -8,51 +8,44 @@
 
 ## Overview
 
-This repository uses a central configuration file — `config/variables.yml` — to document common values needed across all conversion scripts.
-
-```powershell
-cp config/variables.example.yml config/variables.yml
-```
-
-**Never commit** `variables.yml` — it is excluded by `.gitignore`.
-
-!!! note "Current usage"
-    Scripts currently accept parameters directly on the command line. The config file documents canonical values and serves as the parameter reference. Future versions will support loading from the config file directly.
-
----
-
-## Config Structure
-
-```
-config/
-├── variables.example.yml        # Template with example values (committed)
-├── variables.yml                # Your actual values (gitignored)
-└── schema/
-    └── variables.schema.json    # JSON Schema for CI validation
-```
+This repository uses a **single central configuration file** — `config/variables.yml` — as the source of truth for all deployment automation. Copy from `config/variables.example.yml` to get started.
 
 ---
 
 ## Naming Rules
 
 | Rule | Standard | Example |
-|------|----------|---------|
-| Top-level sections | `snake_case` | `azure`, `azure_local`, `conversion` |
-| Keys within sections | `snake_case` | `subscription_id`, `max_parallel` |
+|------|----------|--------|
+| Top-level sections | `snake_case` | `azure_local`, `networking` |
+| Keys within sections | `snake_case` | `subscription_id`, `resource_name` |
 | Pattern | `^[a-z][a-z0-9_]*$` | — |
-| Azure resource IDs | Full ARM resource ID | `/subscriptions/.../customLocations/cl-01` |
-| Secrets | `keyvault://` URI format | `keyvault://kv-platform/admin-password` |
+| Max length | 50 characters | — |
+| Booleans | Descriptive names | `monitoring_enabled: true` |
+| Secrets | `keyvault://` URI format | `keyvault://kv-iic-platform/admin-password` |
 
 ---
 
-## Sections
+## Config File Structure
 
-| Section | Description | Used By |
-|---------|-------------|---------|
-| `azure` | Subscription, resource group, region | Azure Local runbook |
-| `azure_local` | Custom location ID, logical network ID | Azure Local runbook |
-| `conversion` | Working directory, parallelism settings | Both runbooks |
-| `tags` | Azure resource tags | Azure Local runbook |
+```
+config/
+├── variables.example.yml        # Template with IIC examples (committed)
+├── variables.yml                # Your actual config (gitignored)
+└── schema/
+    └── variables.schema.json    # JSON Schema for CI validation
+```
+
+---
+
+## Key Vault Resolution
+
+Secrets are never stored in plaintext:
+
+```yaml
+security:
+  admin_password: "keyvault://kv-iic-platform/admin-password"
+  domain_join_password: "keyvault://kv-iic-platform/domain-join"
+```
 
 ---
 
@@ -64,5 +57,9 @@ Every PR validates `config/variables.example.yml` against `config/schema/variabl
 
 ## Detailed Reference
 
-- **[Variable Reference](../reference/variables.md)** — per-variable documentation with types, defaults, and script parameter mapping
-- **[Variable Management Standard](https://azurelocal.cloud/standards/variable-management/)** — org-wide governance
+For the complete variable catalog see:
+
+- **[Variable Reference](../reference/variables.md)** — per-variable documentation
+- **[Variable Management Standard](https://azurelocal.cloud/docs/implementation/04-variable-management-standard)** — org-wide governance
+- **[Variable Management Suite](https://azurelocal.cloud/standards/variable-management/)** — registry, schema validation, workflows
+- Tool-specific parameter mapping
