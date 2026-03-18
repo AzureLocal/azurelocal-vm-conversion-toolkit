@@ -24,3 +24,5 @@ config/variables.yml
 # Windows
 Thumbs.db
 desktop.ini
+
+site/
