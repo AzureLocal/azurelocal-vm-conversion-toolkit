@@ -1,10 +1,10 @@
 # Standards
 
-> **Central standards:** [AzureLocal Standards Hub](https://azurelocal.cloud/standards/)  
-> **Applies to:** azurelocal-vm-conversion-toolkit  
-> **Last Updated:** 2026-03-17
+This repository follows the **org-wide AzureLocal standards** maintained on the central documentation site.
 
-This section documents repo-specific standards that extend the org-wide AzureLocal standards. Each local page adapts the central standard for VM Conversion Toolkit conventions.
+!!! info "Central Standards"
+    The full standards suite is at [azurelocal.cloud/standards](https://azurelocal.cloud/standards/).
+    This section provides the key rules adapted for the VM Conversion Toolkit.
 
 ---
 
@@ -23,12 +23,10 @@ This section documents repo-specific standards that extend the org-wide AzureLoc
 
 ---
 
-## Additional References
+## References
 
-| Resource | Description |
-|----------|-------------|
-| [Variable Reference](../reference/variables.md) | Per-variable catalog for this repo |
-| [Repository Structure](https://azurelocal.cloud/standards/repo-structure) | Required files and directories |
+- [Variable Reference](../reference/variables.md) — Per-variable catalog for this repo
+- [Repository Structure](https://azurelocal.cloud/standards/repo-structure) — Required file layout
 
 ---
 
