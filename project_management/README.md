@@ -23,8 +23,8 @@ azurelocalcloud-azurelocal.github.io/project_management/
 
 | Resource | Location |
 |----------|----------|
-| Label definitions | `azurelocalcloud-azurelocal.github.io/project_management/labels.yml` |
-| Repo standard | `azurelocalcloud-azurelocal.github.io/project_management/repo-standard.md` |
+| Label definitions | `azurelocalcloud-azurelocal.github.io/.github/labels.yml` |
+| Repo standard | `azurelocalcloud-azurelocal.github.io/.github/repo-standard.md` |
 | Issue templates | `.github/ISSUE_TEMPLATE/` (this repo) |
 | PR template | `.github/pull_request_template.md` (this repo) |
 | CODEOWNERS | `.github/CODEOWNERS` (this repo) |
