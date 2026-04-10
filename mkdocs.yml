@@ -1,5 +1,6 @@
 site_name: Azure Local VM Conversion Toolkit
 site_description: Convert Gen 1 virtual machines to Gen 2 on Azure Local and Hyper-V
+site_author: Azure Local Cloud
 site_url: https://azurelocal.github.io/azurelocal-vm-conversion-toolkit/
 repo_url: https://github.com/AzureLocal/azurelocal-vm-conversion-toolkit
 repo_name: AzureLocal/azurelocal-vm-conversion-toolkit
@@ -94,5 +95,5 @@ extra:
   homepage: https://azurelocal.cloud
 
 copyright: >-
-  Copyright &copy; 2025 Azure Local. Designed and maintained by
+  Copyright &copy; 2026 Azure Local. Designed and maintained by
   <a href="https://www.hybridsolutions.cloud">Hybrid Cloud Solutions</a>.
