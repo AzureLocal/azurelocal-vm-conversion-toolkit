@@ -1,5 +1,7 @@
 # Azure Local VM Conversion Toolkit
 
+![Azure Local VM Conversion Toolkit](assets/images/azurelocal-vm-conversion-toolkit-banner.svg)
+
 !!! warning "Under Active Development"
     This repository is a work in progress. Scripts, templates, and automation are **not guaranteed to work** at this time. Use at your own risk and expect breaking changes.
 
