@@ -1,5 +1,11 @@
 # Azure Local VM Conversion Toolkit
 
+![Azure Local VM Conversion Toolkit](docs/assets/images/azurelocal-vm-conversion-toolkit-banner.svg)
+
+[![Azure Local](https://img.shields.io/badge/Azure%20Local-azurelocal.cloud-0078D4?logo=microsoft-azure)](https://azurelocal.cloud)
+
+Documentation: [azurelocal.cloud](https://azurelocal.cloud) | Solutions: [Azure Local Solutions](https://azurelocal.cloud)
+
 PowerShell toolkit for converting Hyper-V Gen 1 VMs to Gen 2 on Azure Local while preserving Azure Arc management.
 
 ---
