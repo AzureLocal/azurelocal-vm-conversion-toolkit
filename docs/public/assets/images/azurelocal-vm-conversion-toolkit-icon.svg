@@ -1,0 +1,60 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" width="200" height="200">
+  <defs>
+    <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#1A86D8;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#003A70;stop-opacity:1" />
+    </linearGradient>
+    <filter id="shadow" x="-10%" y="-10%" width="120%" height="120%">
+      <feDropShadow dx="0" dy="2" stdDeviation="3" flood-color="#001A3A" flood-opacity="0.4"/>
+    </filter>
+  </defs>
+
+  <rect width="200" height="200" rx="38" ry="38" fill="url(#bgGrad)"/>
+
+  <g opacity="0.08" stroke="white" stroke-width="0.8">
+    <line x1="0" y1="50" x2="200" y2="50"/>
+    <line x1="0" y1="100" x2="200" y2="100"/>
+    <line x1="0" y1="150" x2="200" y2="150"/>
+    <line x1="50" y1="0" x2="50" y2="200"/>
+    <line x1="100" y1="0" x2="100" y2="200"/>
+    <line x1="150" y1="0" x2="150" y2="200"/>
+  </g>
+
+  <g transform="translate(100,32)" filter="url(#shadow)">
+    <polygon points="0,-14 14,-5 10,12 0,7 -10,12 -14,-5" fill="#27AE60" stroke="#1E8449" stroke-width="0.8"/>
+    <text x="0" y="3" text-anchor="middle" font-family="Arial, sans-serif" font-weight="bold" font-size="9" fill="white">V</text>
+  </g>
+
+  <g filter="url(#shadow)">
+    <circle cx="100" cy="100" r="46" fill="white"/>
+    <circle cx="100" cy="100" r="38" fill="url(#bgGrad)"/>
+
+    <!-- Source VM (left server, filled) -->
+    <rect x="65" y="87" width="26" height="22" rx="3" fill="#27AE60" opacity="0.80"/>
+    <line x1="68" y1="93" x2="88" y2="93" stroke="white" stroke-width="1.2" opacity="0.70"/>
+    <line x1="68" y1="98" x2="88" y2="98" stroke="white" stroke-width="1.2" opacity="0.50"/>
+    <circle cx="70" cy="103" r="2" fill="white" opacity="0.70"/>
+    <circle cx="76" cy="103" r="2" fill="white" opacity="0.50"/>
+
+    <!-- Conversion arrows (3 staggered) -->
+    <line x1="94" y1="94" x2="106" y2="94" stroke="#27AE60" stroke-width="1.8" opacity="0.90"/>
+    <polygon points="106,94 102,91 102,97" fill="#27AE60" opacity="0.90"/>
+    <line x1="94" y1="100" x2="106" y2="100" stroke="#27AE60" stroke-width="1.8" opacity="0.70"/>
+    <polygon points="106,100 102,97 102,103" fill="#27AE60" opacity="0.70"/>
+    <line x1="94" y1="106" x2="106" y2="106" stroke="#27AE60" stroke-width="1.8" opacity="0.50"/>
+    <polygon points="106,106 102,103 102,109" fill="#27AE60" opacity="0.50"/>
+
+    <!-- Target (right, Azure Local node style, outline) -->
+    <rect x="109" y="87" width="26" height="22" rx="3" fill="none" stroke="#27AE60" stroke-width="2" opacity="0.90"/>
+    <line x1="112" y1="93" x2="132" y2="93" stroke="#27AE60" stroke-width="1.2" opacity="0.60"/>
+    <line x1="112" y1="98" x2="132" y2="98" stroke="#27AE60" stroke-width="1.2" opacity="0.40"/>
+    <!-- Azure arc indicator -->
+    <path d="M114,108 Q122,102 130,108" fill="none" stroke="#27AE60" stroke-width="1.5" opacity="0.80"/>
+    <circle cx="122" cy="104" r="2.5" fill="#27AE60" opacity="0.70"/>
+
+    <circle cx="100" cy="100" r="38" fill="none" stroke="white" stroke-width="1.5" opacity="0.2"/>
+  </g>
+
+  <text x="100" y="168" text-anchor="middle" font-family="'Segoe UI', Arial, sans-serif" font-weight="bold" font-size="13" fill="white" letter-spacing="1" opacity="0.95">AZURE LOCAL</text>
+  <text x="100" y="186" text-anchor="middle" font-family="'Segoe UI', Arial, sans-serif" font-weight="bold" font-size="10" fill="#27AE60" letter-spacing="1" opacity="0.95">VM CONVERSION</text>
+</svg>
