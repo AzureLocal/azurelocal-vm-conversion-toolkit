@@ -63,9 +63,9 @@ Get-Content C:\Windows\setupact.log | Select-String -Pattern "MBR2GPT" -Context 
 
 **Symptom:** After Gen 2 conversion and VM boot, the VM doesn't appear in the Azure portal within 10 minutes.
 
-!!! note
-    **This section applies to Path 1 (Azure Local) only.** On Path 1, VM Arc projection is performed explicitly by running `05-Reconnect-AzureLocalVM.ps1` — it does not happen automatically after `03-Convert-Gen1toGen2.ps1`. If script 05 fails or the VM does not appear in the portal, use the steps below. Path 2 (Hyper-V) has no Azure integration — this section does not apply.
-
+> [!NOTE]
+> **This section applies to Path 1 (Azure Local) only.** On Path 1, VM Arc projection is performed explicitly by running `05-Reconnect-AzureLocalVM.ps1` — it does not happen automatically after `03-Convert-Gen1toGen2.ps1`. If script 05 fails or the VM does not appear in the portal, use the steps below. Path 2 (Hyper-V) has no Azure integration — this section does not apply.
+>
 !!! important
     On Azure Local, VM Arc enrollment is managed entirely by the **platform** — specifically the Azure Arc resource bridge and the VM Config Agent running on the host node. There is no in-guest Connected Machine agent to re-register. You cannot re-register Arc from inside the guest VM.
 
@@ -88,9 +88,9 @@ Get-EventLog -LogName Application -Source "Microsoft-AzureStack-HCI-GuestAgent" 
 
 **Step 4:** Use the manual fallback command logged by `03-Convert-Gen1toGen2.ps1` at the end of its run. It logs a full `az stack-hci-vm create` command you can re-run to re-project the VM resource into Azure.
 
-!!! note
-    This fallback applies to **Path 1 (Azure Local)** only. Re-running `05-Reconnect-AzureLocalVM.ps1` directly is generally preferred over this manual fallback command.
-
+> [!NOTE]
+> This fallback applies to **Path 1 (Azure Local)** only. Re-running `05-Reconnect-AzureLocalVM.ps1` directly is generally preferred over this manual fallback command.
+>
 **Step 5:** If the VM still doesn't appear after 15 minutes with the resource bridge healthy, delete the stale Arc VM resource from Azure (if one exists) and re-run `05-Reconnect-AzureLocalVM.ps1` (**Path 1**, preferred) or re-run the `az stack-hci-vm create` fallback command logged by script 03 (**Path 1**, manual fallback). Both options apply to **Path 1 (Azure Local)** only.
 
 ---

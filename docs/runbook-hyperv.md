@@ -1,13 +1,13 @@
 # Runbook: Hyper-V Cluster Path
 
-!!! note
-    **This runbook covers the Hyper-V Cluster path (scripts 01–04).** It converts a Gen 1 VM into a Gen 2 Hyper-V VM on the same cluster node. The resulting VM is managed directly through Hyper-V and does not appear as an `Microsoft.AzureStackHCI/virtualMachineInstances` resource in the Azure portal. If you need a portal-managed Azure Local VM, see [Runbook: Azure Local VM Path](runbook-azurelocal.md).
-
+> [!NOTE]
+> **This runbook covers the Hyper-V Cluster path (scripts 01–04).** It converts a Gen 1 VM into a Gen 2 Hyper-V VM on the same cluster node. The resulting VM is managed directly through Hyper-V and does not appear as an `Microsoft.AzureStackHCI/virtualMachineInstances` resource in the Azure portal. If you need a portal-managed Azure Local VM, see [Runbook: Azure Local VM Path](runbook-azurelocal.md).
+>
 This guide walks through running the Azure Local VM Conversion Toolkit from start to finish.
 
-!!! warning
-    Ensure all prerequisites are satisfied before you begin. See [Prerequisites](prerequisites.md).
-
+> [!WARNING]
+> Ensure all prerequisites are satisfied before you begin. See [Prerequisites](prerequisites.md).
+>
 ---
 
 ## Workflow Overview
@@ -76,9 +76,9 @@ Copy `scripts/hyperv/02-Convert-MBRtoGPT.ps1` into the guest VM and run it:
 .\02-Convert-MBRtoGPT.ps1
 ```
 
-!!! caution
-    Shut down the VM immediately after — do **NOT** reboot. The disk is now GPT but the VM is still Gen 1. Rebooting will fail.
-
+> [!CAUTION]
+> Shut down the VM immediately after — do **NOT** reboot. The disk is now GPT but the VM is still Gen 1. Rebooting will fail.
+>
 ```powershell
 Stop-Computer -Force
 ```
@@ -91,9 +91,9 @@ If validation fails, check `C:\Windows\setupact.log` inside the guest. See [mbr2
 
 Run from the cluster node after the guest VM is shut down.
 
-!!! note
-    This step **deletes** the Gen 1 Hyper-V VM object entirely and creates a brand new Gen 2 VM object in its place. The existing VHDX disk files are preserved and reattached — your workload data is not touched — but the VM configuration itself is destroyed and rebuilt. This is why a VHDX backup is taken first and why this operation is irreversible without that backup.
-
+> [!NOTE]
+> This step **deletes** the Gen 1 Hyper-V VM object entirely and creates a brand new Gen 2 VM object in its place. The existing VHDX disk files are preserved and reattached — your workload data is not touched — but the VM configuration itself is destroyed and rebuilt. This is why a VHDX backup is taken first and why this operation is irreversible without that backup.
+>
 Specifically, the script:
 
 1. Captures all settings (CPU, memory, NIC, VLAN, disk paths) from the Gen 1 VM

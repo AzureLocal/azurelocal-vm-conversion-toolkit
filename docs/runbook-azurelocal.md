@@ -1,14 +1,14 @@
 # Runbook: Azure Local VM Path
 
-!!! note
-    **This runbook covers the Azure Local VM path (scripts 01–03, 05).** The resulting VM is a full `Microsoft.AzureStackHCI/virtualMachineInstances` resource visible in the Azure portal and managed through the Azure Local management plane. If you only need a Gen 2 VM managed through Hyper-V directly without portal management, see [Runbook: Hyper-V Cluster Path](runbook-hyperv.md).
-
+> [!NOTE]
+> **This runbook covers the Azure Local VM path (scripts 01–03, 05).** The resulting VM is a full `Microsoft.AzureStackHCI/virtualMachineInstances` resource visible in the Azure portal and managed through the Azure Local management plane. If you only need a Gen 2 VM managed through Hyper-V directly without portal management, see [Runbook: Hyper-V Cluster Path](runbook-hyperv.md).
+>
 !!! note
     **This path IS workload-preserving.** The VM keeps its machine identity, domain join, installed applications, and all OS state. No Sysprep. No reinstallation. The same converted Gen 2 VM that runs in Hyper-V is reconnected into the Azure control plane using `az stack-hci-vm reconnect-to-azure`.
 
-!!! warning
-    `az stack-hci-vm reconnect-to-azure` is currently in **Preview**. Validate this capability is available in your Azure Local version before planning production use.
-
+> [!WARNING]
+> `az stack-hci-vm reconnect-to-azure` is currently in **Preview**. Validate this capability is available in your Azure Local version before planning production use.
+>
 !!! warning
     Ensure all prerequisites are satisfied before you begin. See [Prerequisites](prerequisites.md).
 
@@ -99,9 +99,9 @@ Copy `scripts/azurelocal/02-Convert-MBRtoGPT.ps1` into the guest VM and run it:
 .\02-Convert-MBRtoGPT.ps1
 ```
 
-!!! caution
-    Shut down the VM immediately after — do **NOT** reboot. The disk is now GPT but the VM is still Gen 1. Rebooting will fail.
-
+> [!CAUTION]
+> Shut down the VM immediately after — do **NOT** reboot. The disk is now GPT but the VM is still Gen 1. Rebooting will fail.
+>
 ```powershell
 Stop-Computer -Force
 ```
@@ -114,9 +114,9 @@ If validation fails, see [mbr2gpt fails validation](troubleshooting.md#mbr2gpt-f
 
 This step is identical to the Hyper-V path. Run it from the cluster node after the guest VM is shut down.
 
-!!! note
-    This step deletes the Gen 1 VM object and creates a new Gen 2 Hyper-V VM with the same name, reattaching the existing VHDXs. The workload is preserved — only the VM configuration object is recreated. See [Runbook: Hyper-V Cluster Path — Step 3](runbook-hyperv.md#step-3-convert-gen-1-gen-2) for the full explanation of what the script does internally.
-
+> [!NOTE]
+> This step deletes the Gen 1 VM object and creates a new Gen 2 Hyper-V VM with the same name, reattaching the existing VHDXs. The workload is preserved — only the VM configuration object is recreated. See [Runbook: Hyper-V Cluster Path — Step 3](runbook-hyperv.md#step-3-convert-gen-1-gen-2) for the full explanation of what the script does internally.
+>
 ```powershell
 .\scripts\azurelocal\03-Convert-Gen1toGen2.ps1 `
     -VMName "WebServer01" `

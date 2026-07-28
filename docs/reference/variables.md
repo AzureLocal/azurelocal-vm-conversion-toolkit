@@ -2,13 +2,14 @@
 
 All VM conversion scripts use a central configuration file: `config/variables.yml`. This file documents the common values you will need across all scripts. Future versions may support loading from this file directly.
 
-!!! tip "Getting started"
-    Copy the example and fill in your values:
-    ```powershell
-    cp config/variables.example.yml config/variables.yml
-    ```
-    **Never commit** `variables.yml` — it is excluded by `.gitignore` because it contains environment-specific values.
-
+> [!TIP]
+> **Getting started**
+> Copy the example and fill in your values:
+> ```powershell
+> cp config/variables.example.yml config/variables.yml
+> ```
+> **Never commit** `variables.yml` — it is excluded by `.gitignore` because it contains environment-specific values.
+>
 !!! note "Current usage"
     These scripts currently accept parameters directly on the command line.
     This file documents the common values you will need and serves as the canonical parameter reference.

@@ -35,9 +35,9 @@ Choose **one** based on how the converted VM needs to be managed after conversio
 - You want the simplest possible path with zero Azure dependencies
 - Your cluster is a standalone Hyper-V cluster without Azure Local registration
 
-!!! note
-    **Azure Local is the primary focus of this toolkit.** Path 1 is the recommended path for Azure Local clusters. Path 2 is included for environments that need Hyper-V-only management with no Azure dependencies.
-
+> [!NOTE]
+> **Azure Local is the primary focus of this toolkit.** Path 1 is the recommended path for Azure Local clusters. Path 2 is included for environments that need Hyper-V-only management with no Azure dependencies.
+>
 ---
 
 ## Before You Start
@@ -163,9 +163,9 @@ Quick reference — run these four steps in order:
     -LogicalNetworkId "/subscriptions/.../logicalNetworks/mgmt-lnet"
 ```
 
-!!! caution
-    `az stack-hci-vm reconnect-to-azure` is a **Preview** command. Confirm it is available in your `stack-hci-vm` extension before running Step 4: `az stack-hci-vm reconnect-to-azure --help`
-
+> [!CAUTION]
+> `az stack-hci-vm reconnect-to-azure` is a **Preview** command. Confirm it is available in your `stack-hci-vm` extension before running Step 4: `az stack-hci-vm reconnect-to-azure --help`
+>
 ---
 
 ## Path 2 — Hyper-V

@@ -1,8 +1,8 @@
 # Gen 1 vs Gen 2: Should You Convert?
 
-!!! warning
-    **Read this before running anything.** Conversion is a destructive, one-way operation. This document is intended to help you make an informed decision — and in most cases, the right answer is **not** to convert.
-
+> [!WARNING]
+> **Read this before running anything.** Conversion is a destructive, one-way operation. This document is intended to help you make an informed decision — and in most cases, the right answer is **not** to convert.
+>
 ---
 
 ## The Short Answer
@@ -134,9 +134,9 @@ If you have decided to proceed with conversion, there are two distinct paths dep
 - Portal-based VM management is not a requirement
 - You want the simplest possible path — no Azure CLI dependencies
 
-!!! note
-    Both paths are workload-preserving. Path 1 adds one extra step (`reconnect-to-azure`) after the Gen 2 conversion — it does not require Sysprep or any identity-destructive operation.
-
+> [!NOTE]
+> Both paths are workload-preserving. Path 1 adds one extra step (`reconnect-to-azure`) after the Gen 2 conversion — it does not require Sysprep or any identity-destructive operation.
+>
 ---
 
 ## Proceed to Conversion
