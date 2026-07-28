@@ -1,10 +1,12 @@
 import { defineConfig } from 'vitepress'
 
 export default defineConfig({
+  ignoreDeadLinks: true,
   base: '/azurelocal-vm-conversion-toolkit/',
-  title: "azurelocal-vm-conversion-toolkit Documentation",
+  title: "Azure Local VM Conversion Toolkit",
   description: "Governed centrally by HCS Platform Engineering standards",
   themeConfig: {
+    logo: '/assets/images/azurelocal-vm-conversion-toolkit-icon.svg',
     nav: [
       { text: 'Home', link: '/' },
       { text: 'Architecture', link: '/architecture' },
@@ -27,5 +29,6 @@ export default defineConfig({
     }
   }
 })
+
 
 
