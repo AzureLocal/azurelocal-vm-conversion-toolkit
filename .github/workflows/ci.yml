@@ -1,0 +1,66 @@
+# Pull-request checks: PSScriptAnalyzer, Pester unit tests (everything mocked, nothing touches Azure or a cluster),
+# a Markdown link check and a VitePress docs build. The same script runs locally: pwsh ./tests/Invoke-Checks.ps1 -Check All
+# Actions are pinned to full commit SHAs (the comment names the release).
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  checks:
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Install the PowerShell modules the checks need
+        shell: pwsh
+        run: |
+          Set-PSRepository -Name PSGallery -InstallationPolicy Trusted
+          # -SkipPublisherCheck: the runner image ships Pester 3.4 signed by Microsoft; the pinned 5.9.1 has a different publisher.
+          Install-Module Pester -RequiredVersion 5.9.1 -Scope CurrentUser -Force -SkipPublisherCheck
+          Install-Module PSScriptAnalyzer -RequiredVersion 1.25.0 -Scope CurrentUser -Force
+
+      - name: Static analysis
+        shell: pwsh
+        run: ./tests/Invoke-Checks.ps1 -Check Analyzer
+
+      - name: Pester unit tests
+        if: ${{ !cancelled() }}
+        shell: pwsh
+        run: ./tests/Invoke-Checks.ps1 -Check Pester
+
+      - name: Markdown links
+        if: ${{ !cancelled() }}
+        shell: pwsh
+        run: ./tests/Invoke-Checks.ps1 -Check Links
+
+  docs:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 20
+
+      - name: Build the VitePress site
+        run: |
+          cd docs
+          npm install --no-audit --no-fund
+          npm run docs:build

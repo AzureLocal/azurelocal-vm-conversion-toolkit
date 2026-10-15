@@ -31,3 +31,8 @@ site/
 # Claude Code local settings (logs and machine-local overrides only)
 .claude/logs/
 .claude/settings.local.json
+
+# Docs toolchain
+node_modules/
+docs/.vitepress/cache/
+docs/.vitepress/dist/
