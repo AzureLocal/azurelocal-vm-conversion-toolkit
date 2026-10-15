@@ -1,4 +1,4 @@
-#Requires -RunAsAdministrator
+﻿#Requires -RunAsAdministrator
 #Requires -Modules Hyper-V, FailoverClusters
 
 <#
@@ -31,7 +31,17 @@
     Path to the conversion working directory (created by Script 01).
 
 .PARAMETER BackupVHDX
-    Create a backup copy of VHDX files before conversion. Default: $true
+    Copy every disk file (and any parent of a differencing disk) to Backups\<VM>\<timestamp> before the VM
+    is removed, and verify each copy by size and SHA256. The VM is NOT removed unless every file verified.
+    Default: $true. Setting it to $false is refused unless -IUnderstandNoBackup is also given.
+
+.PARAMETER SecureBootTemplate
+    Secure Boot template for the new Gen 2 VM. Default MicrosoftWindows. Linux guests usually need
+    MicrosoftUEFICertificateAuthority; a wrong template means the VM does not boot.
+
+.PARAMETER IUnderstandNoBackup
+    Required together with -BackupVHDX:$false. Removing the VM without a verified copy of its disks is
+    your decision and your risk.
 
 .EXAMPLE
     .\03-Convert-Gen1toGen2.ps1 `
@@ -48,19 +58,34 @@ param(
     [string]$WorkingDirectory,
 
     [Parameter()]
-    [bool]$BackupVHDX = $true
+    [bool]$BackupVHDX = $true,
+
+    [Parameter()]
+    [ValidateSet('MicrosoftWindows', 'MicrosoftUEFICertificateAuthority', 'OpenSourceShieldedVM')]
+    [string]$SecureBootTemplate = 'MicrosoftWindows',
+
+    [Parameter()]
+    [switch]$IUnderstandNoBackup
 )
 
 # ── Global Settings ──────────────────────────────────────────────────────────
 $ErrorActionPreference = 'Stop'
+
+Import-Module (Join-Path $PSScriptRoot '..\common\ConversionSafety.psd1') -Force -ErrorAction Stop
+
+# Refuse to run without a backup unless the operator explicitly accepted that.
+Assert-BackupPolicy -BackupVHDX $BackupVHDX -IUnderstandNoBackup:$IUnderstandNoBackup
 $LogFile = Join-Path $WorkingDirectory "Logs\Gen2Convert_${VMName}_$(Get-Date -Format 'yyyyMMdd_HHmmss').log"
+$logDirectory = Split-Path $LogFile -Parent
+if (-not (Test-Path $logDirectory)) { New-Item -Path $logDirectory -ItemType Directory -Force -WhatIf:$false | Out-Null }
+$backupDir = $null
 
 function Write-Log {
     param([string]$Message, [string]$Level = "INFO")
     $timestamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
     $entry = "[$timestamp] [$Level] $Message"
     Write-Host $entry -ForegroundColor $(switch ($Level) { "ERROR" { "Red" } "WARN" { "Yellow" } "SUCCESS" { "Green" } default { "Cyan" } })
-    Add-Content -Path $LogFile -Value $entry
+    Add-Content -Path $LogFile -Value $entry -WhatIf:$false
 }
 
 Write-Log "═══════════════════════════════════════════════════════════════"
@@ -73,9 +98,8 @@ Write-Log "Step 1: Loading VM configuration..."
 
 # Check for config file from Script 01
 $configPath = Join-Path $WorkingDirectory "Configs\${VMName}_config.json"
-$savedConfig = $null
 if (Test-Path $configPath) {
-    $savedConfig = Get-Content $configPath -Raw | ConvertFrom-Json
+    $null = Get-Content $configPath -Raw | ConvertFrom-Json   # fails early if the saved config is corrupt
     Write-Log "  Loaded saved config from: $configPath" -Level "SUCCESS"
 }
 
@@ -104,6 +128,13 @@ if ($checkpoints.Count -gt 0) {
     throw "Remove all checkpoints before proceeding."
 }
 
+# Replica, shared and pass-through disks cannot be rebuilt safely by this script.
+$vmId = $vm.Id
+$replication = Get-VMReplication -VMName $VMName -ErrorAction SilentlyContinue
+if ($replication -and "$($replication.ReplicationState)" -notin @('', 'Disabled')) {
+    throw "VM '$VMName' has Hyper-V Replica enabled (state $($replication.ReplicationState)). Remove the replication relationship first; nothing was changed."
+}
+
 # ── Step 2: Capture Full VM Configuration ────────────────────────────────────
 Write-Log ""
 Write-Log "Step 2: Capturing VM configuration..."
@@ -127,6 +158,12 @@ if ($dynamicMemory) {
 $hardDisks = Get-VMHardDiskDrive -VM $vm
 $diskDetails = @()
 foreach ($disk in $hardDisks) {
+    if ($null -ne $disk.DiskNumber -or -not $disk.Path) {
+        throw "VM '$VMName' has a pass-through (physical) disk attached. It cannot be copied or rebuilt by this script. Nothing was changed."
+    }
+    if ($disk.Path -match '\.vhds$' -or $disk.SupportPersistentReservations) {
+        throw "VM '$VMName' uses a shared disk or VHD Set ($($disk.Path)). Other VMs may depend on it; this script refuses to continue. Nothing was changed."
+    }
     $vhd = Get-VHD -Path $disk.Path -ErrorAction SilentlyContinue
     $detail = [PSCustomObject]@{
         Path               = $disk.Path
@@ -185,6 +222,24 @@ catch {
     Write-Log "  VM is not in a cluster group (standalone)" -Level "WARN"
 }
 
+# Everything the rebuild needs must be known BEFORE anything is removed.
+if (@($nicDetails).Count -lt 1) {
+    throw "VM '$VMName' has no network adapter; the rebuild would fail after the VM was removed. Nothing was changed."
+}
+if (-not $bootDiskPath) {
+    throw "No boot disk found for '$VMName'. Nothing was changed."
+}
+
+# -WhatIf stops here: everything above only read state. Copying disks and removing the VM are not simulated.
+if ($WhatIfPreference) {
+    Write-Log ""
+    Write-Log "WHATIF: the checks above passed. A real run would now (1) convert any .vhd disk to .vhdx," -Level "WARN"
+    Write-Log "  (2) copy every disk file to Backups\$VMName\<timestamp> and verify size and SHA256 (skipped only with" -Level "WARN"
+    Write-Log "  -BackupVHDX:`$false -IUnderstandNoBackup), (3) remove '$VMName' from the cluster and Hyper-V, (4) rebuild it as Gen 2." -Level "WARN"
+    Write-Log "  Nothing was copied, converted or removed." -Level "WARN"
+    exit 0
+}
+
 # ── Step 3: VHD Format Check and Backup ─────────────────────────────────────
 Write-Log ""
 Write-Log "Step 3: VHD format validation and backup..."
@@ -206,38 +261,57 @@ foreach ($disk in $diskDetails) {
     }
 }
 
+$backupRecords = @()
 if ($BackupVHDX) {
-    $backupDir = Join-Path $WorkingDirectory "Backups\$VMName"
-    if (-not (Test-Path $backupDir)) { New-Item -Path $backupDir -ItemType Directory -Force | Out-Null }
-
-    foreach ($disk in $diskDetails) {
-        $destPath = Join-Path $backupDir (Split-Path $disk.Path -Leaf)
-        Write-Log "  Backing up: $($disk.Path) → $destPath"
-        Write-Log "    This may take a while for large disks..."
-        Copy-Item -Path $disk.Path -Destination $destPath -Force
-        Write-Log "    Backup complete: $([math]::Round((Get-Item $destPath).Length / 1GB, 2)) GB" -Level "SUCCESS"
+    $backupDir = Join-Path $WorkingDirectory ("Backups\$VMName\" + (Get-Date -Format 'yyyyMMdd_HHmmss'))
+    Write-Log "  Backup folder: $backupDir"
+    if ((("$backupDir" -split '[\x5C/]')[0..2] -join '|') -eq (("$bootDiskPath" -split '[\x5C/]')[0..2] -join '|')) {
+        Write-Log "  NOTE: the backup is on the same volume as the VM. A volume failure would lose both; keep a copy elsewhere if you can." -Level "WARN"
     }
+    Write-Log "  Each file is copied, then compared by size and SHA256. This takes a while for large disks."
+    $backupRecords = Copy-VhdChainWithVerification -DiskPath @($diskDetails | ForEach-Object { $_.Path }) `
+        -DestinationDirectory $backupDir -Log { param($m) Write-Log $m }
+    Write-Log "  Backup verified: $($backupRecords.Count) file(s)" -Level "SUCCESS"
+}
+else {
+    Write-Log "  NO BACKUP: -BackupVHDX:`$false with -IUnderstandNoBackup. The VM will be removed without a verified copy." -Level "WARN"
 }
 
 # ── Step 4: Remove Gen 1 VM (Preserve Disks) ────────────────────────────────
 Write-Log ""
 Write-Log "Step 4: Removing Gen 1 VM..."
 
+# Hard gate: no verified copy of every disk file, no removal.
+if ($BackupVHDX) {
+    Assert-VerifiedBackup -DiskPath @($diskDetails | ForEach-Object { $_.Path }) -Record $backupRecords
+    Write-Log "  Backup gate passed: every disk file has a verified copy." -Level "SUCCESS"
+}
+
 if (-not $PSCmdlet.ShouldProcess($VMName, "Remove Gen 1 VM (disks will be preserved)")) {
     throw "User cancelled VM removal."
 }
 
-# Remove from cluster first if clustered
+# The VM must still be the same, powered-off VM that was backed up.
+$recheck = Get-VM -Name $VMName -ErrorAction Stop
+if ($recheck.Id -ne $vmId -or $recheck.State -ne 'Off') {
+    throw "VM '$VMName' changed during the backup (identity or power state). It was NOT removed; re-run after checking it."
+}
+
+# Remove from cluster first if clustered. A failure stops the script: removing the VM while the cluster
+# still owns it can leave a broken resource that the cluster restarts or fails over.
 if ($clusterGroup) {
     Write-Log "  Removing from failover cluster..."
     try {
-        Remove-ClusterGroup -Name $VMName -RemoveResources -Force
-        Write-Log "  Removed from cluster" -Level "SUCCESS"
+        Remove-ClusterGroup -Name $VMName -RemoveResources -Force -ErrorAction Stop
     }
     catch {
-        Write-Log "  Cluster removal issue: $_ (continuing...)" -Level "WARN"
+        throw "Could not remove cluster group '$VMName': $_. The VM was NOT removed; nothing was deleted."
     }
     Start-Sleep -Seconds 3
+    if (Get-ClusterGroup -Name $VMName -ErrorAction SilentlyContinue) {
+        throw "Cluster group '$VMName' is still present after removal. The VM was NOT removed; nothing was deleted."
+    }
+    Write-Log "  Removed from cluster" -Level "SUCCESS"
 }
 
 # Remove VM (without deleting VHDXs)
@@ -247,138 +321,149 @@ Write-Log "  Gen 1 VM removed" -Level "SUCCESS"
 
 Start-Sleep -Seconds 3
 
-# ── Step 5: Create Gen 2 VM ─────────────────────────────────────────────────
-Write-Log ""
-Write-Log "Step 5: Creating Gen 2 VM..."
-
-$vmPath = Split-Path (Split-Path $bootDiskPath -Parent) -Parent
-
-$newVMParams = @{
-    Name               = $VMName
-    Generation         = 2
-    MemoryStartupBytes = $memoryStartup
-    VHDPath            = $bootDiskPath
-    Path               = $vmPath
-    SwitchName         = $nicDetails[0].SwitchName
-}
-
-Write-Log "  Creating VM with params:"
-$newVMParams.GetEnumerator() | ForEach-Object { Write-Log "    $($_.Key): $($_.Value)" }
-
-$newVM = New-VM @newVMParams
-Write-Log "  Gen 2 VM created" -Level "SUCCESS"
-
-# ── Step 6: Configure VM Settings ───────────────────────────────────────────
-Write-Log ""
-Write-Log "Step 6: Applying VM configuration..."
-
-# Processor
-Set-VMProcessor -VM $newVM -Count $processorCount
-Write-Log "  Processors: $processorCount"
-
-# Memory
-if ($dynamicMemory) {
-    Set-VMMemory -VM $newVM -DynamicMemoryEnabled $true -MinimumBytes $memoryMin -MaximumBytes $memoryMax -StartupBytes $memoryStartup
-    Write-Log "  Dynamic Memory: $($memoryMin / 1MB)MB - $($memoryMax / 1MB)MB (Start: $($memoryStartup / 1MB)MB)"
-}
-
-# Secure Boot
 try {
-    Set-VMFirmware -VM $newVM -EnableSecureBoot On -SecureBootTemplate "MicrosoftWindows"
-    Write-Log "  Secure Boot: Enabled (MicrosoftWindows template)"
-}
-catch {
-    Write-Log "  Secure Boot configuration issue: $_" -Level "WARN"
+    # ── Step 5: Create Gen 2 VM ─────────────────────────────────────────────────
+    Write-Log ""
+    Write-Log "Step 5: Creating Gen 2 VM..."
+
+    $vmPath = Split-Path (Split-Path $bootDiskPath -Parent) -Parent
+
+    $newVMParams = @{
+        Name               = $VMName
+        Generation         = 2
+        MemoryStartupBytes = $memoryStartup
+        VHDPath            = $bootDiskPath
+        Path               = $vmPath
+        SwitchName         = $nicDetails[0].SwitchName
+    }
+
+    Write-Log "  Creating VM with params:"
+    $newVMParams.GetEnumerator() | ForEach-Object { Write-Log "    $($_.Key): $($_.Value)" }
+
+    $newVM = New-VM @newVMParams
+    Write-Log "  Gen 2 VM created" -Level "SUCCESS"
+
+    # ── Step 6: Configure VM Settings ───────────────────────────────────────────
+    Write-Log ""
+    Write-Log "Step 6: Applying VM configuration..."
+
+    # Processor
+    Set-VMProcessor -VM $newVM -Count $processorCount
+    Write-Log "  Processors: $processorCount"
+
+    # Memory
+    if ($dynamicMemory) {
+        Set-VMMemory -VM $newVM -DynamicMemoryEnabled $true -MinimumBytes $memoryMin -MaximumBytes $memoryMax -StartupBytes $memoryStartup
+        Write-Log "  Dynamic Memory: $($memoryMin / 1MB)MB - $($memoryMax / 1MB)MB (Start: $($memoryStartup / 1MB)MB)"
+    }
+
+    # Secure Boot
     try {
-        Set-VMFirmware -VM $newVM -EnableSecureBoot Off
-        Write-Log "  Secure Boot: Disabled (fallback)" -Level "WARN"
+        Set-VMFirmware -VM $newVM -EnableSecureBoot On -SecureBootTemplate $SecureBootTemplate
+        Write-Log "  Secure Boot: Enabled ($SecureBootTemplate template)"
     }
     catch {
-        Write-Log "  Could not configure Secure Boot: $_" -Level "WARN"
-    }
-}
-
-# Attach additional data disks
-$additionalDisks = $diskDetails | Where-Object { $_.Path -ne $bootDiskPath }
-$scsiLocation = 1
-foreach ($disk in $additionalDisks) {
-    Write-Log "  Attaching data disk: $($disk.Path) at SCSI 0:$scsiLocation"
-    Add-VMHardDiskDrive -VM $newVM -ControllerType SCSI -ControllerNumber 0 -ControllerLocation $scsiLocation -Path $disk.Path
-    $scsiLocation++
-}
-
-# Configure NICs
-$firstNic = Get-VMNetworkAdapter -VM $newVM | Select-Object -First 1
-if ($nicDetails[0].VlanId -and $nicDetails[0].VlanId -gt 0) {
-    Set-VMNetworkAdapterVlan -VMNetworkAdapter $firstNic -Access -VlanId $nicDetails[0].VlanId
-    Write-Log "  NIC 1 VLAN: $($nicDetails[0].VlanId)"
-}
-if ($nicDetails[0].MacAddress -and $nicDetails[0].MacAddress -ne "000000000000") {
-    try {
-        Set-VMNetworkAdapter -VMNetworkAdapter $firstNic -StaticMacAddress $nicDetails[0].MacAddress
-        Write-Log "  NIC 1 MAC (static): $($nicDetails[0].MacAddress)"
-    }
-    catch {
-        Write-Log "  Could not set static MAC (may be in use): $_" -Level "WARN"
-    }
-}
-
-for ($i = 1; $i -lt $nicDetails.Count; $i++) {
-    $nic = $nicDetails[$i]
-    if ($nic.IsLegacy) {
-        Write-Log "  Skipping legacy NIC '$($nic.Name)' — not supported on Gen 2" -Level "WARN"
-        continue
-    }
-    Write-Log "  Adding NIC: $($nic.Name) on switch $($nic.SwitchName)"
-    $newNic = Add-VMNetworkAdapter -VM $newVM -Name $nic.Name -SwitchName $nic.SwitchName -PassThru
-    if ($nic.VlanId -and $nic.VlanId -gt 0) {
-        Set-VMNetworkAdapterVlan -VMNetworkAdapter $newNic -Access -VlanId $nic.VlanId
-    }
-    if ($nic.MacAddress -and $nic.MacAddress -ne "000000000000") {
+        Write-Log "  Secure Boot configuration issue: $_" -Level "WARN"
         try {
-            Set-VMNetworkAdapter -VMNetworkAdapter $newNic -StaticMacAddress $nic.MacAddress
+            Set-VMFirmware -VM $newVM -EnableSecureBoot Off
+            Write-Log "  Secure Boot: Disabled (fallback)" -Level "WARN"
         }
         catch {
-            Write-Log "    Could not set static MAC for $($nic.Name): $_" -Level "WARN"
+            Write-Log "  Could not configure Secure Boot: $_" -Level "WARN"
         }
     }
-}
 
-# Auto start/stop actions
-Set-VM -VM $newVM -AutomaticStartAction $autoStart -AutomaticStopAction $autoStop -AutomaticStartDelay $autoStartDelay
-Write-Log "  Auto Start: $autoStart | Auto Stop: $autoStop"
+    # Attach additional data disks
+    $additionalDisks = $diskDetails | Where-Object { $_.Path -ne $bootDiskPath }
+    $scsiLocation = 1
+    foreach ($disk in $additionalDisks) {
+        Write-Log "  Attaching data disk: $($disk.Path) at SCSI 0:$scsiLocation"
+        Add-VMHardDiskDrive -VM $newVM -ControllerType SCSI -ControllerNumber 0 -ControllerLocation $scsiLocation -Path $disk.Path
+        $scsiLocation++
+    }
 
-# Notes
-$conversionNote = "[Converted Gen1→Gen2 on $(Get-Date -Format 'yyyy-MM-dd HH:mm')]"
-Set-VM -VM $newVM -Notes $(if ($vmNotes) { "$vmNotes`n$conversionNote" } else { $conversionNote })
+    # Configure NICs
+    $firstNic = Get-VMNetworkAdapter -VM $newVM | Select-Object -First 1
+    if ($nicDetails[0].VlanId -and $nicDetails[0].VlanId -gt 0) {
+        Set-VMNetworkAdapterVlan -VMNetworkAdapter $firstNic -Access -VlanId $nicDetails[0].VlanId
+        Write-Log "  NIC 1 VLAN: $($nicDetails[0].VlanId)"
+    }
+    if ($nicDetails[0].MacAddress -and $nicDetails[0].MacAddress -ne "000000000000") {
+        try {
+            Set-VMNetworkAdapter -VMNetworkAdapter $firstNic -StaticMacAddress $nicDetails[0].MacAddress
+            Write-Log "  NIC 1 MAC (static): $($nicDetails[0].MacAddress)"
+        }
+        catch {
+            Write-Log "  Could not set static MAC (may be in use): $_" -Level "WARN"
+        }
+    }
 
-# Enable TPM
-try {
-    $keyProtector = New-HgsGuardian -Name "UntrustedGuardian_$VMName" -GenerateCertificates -ErrorAction SilentlyContinue
-    if ($keyProtector) {
-        $kp = New-HgsKeyProtector -Owner $keyProtector -AllowUntrustedRoot
-        Set-VMKeyProtector -VM $newVM -KeyProtector $kp.RawData
-        Enable-VMTPM -VM $newVM
-        Write-Log "  TPM: Enabled" -Level "SUCCESS"
+    for ($i = 1; $i -lt $nicDetails.Count; $i++) {
+        $nic = $nicDetails[$i]
+        if ($nic.IsLegacy) {
+            Write-Log "  Skipping legacy NIC '$($nic.Name)' — not supported on Gen 2" -Level "WARN"
+            continue
+        }
+        Write-Log "  Adding NIC: $($nic.Name) on switch $($nic.SwitchName)"
+        $newNic = Add-VMNetworkAdapter -VM $newVM -Name $nic.Name -SwitchName $nic.SwitchName -PassThru
+        if ($nic.VlanId -and $nic.VlanId -gt 0) {
+            Set-VMNetworkAdapterVlan -VMNetworkAdapter $newNic -Access -VlanId $nic.VlanId
+        }
+        if ($nic.MacAddress -and $nic.MacAddress -ne "000000000000") {
+            try {
+                Set-VMNetworkAdapter -VMNetworkAdapter $newNic -StaticMacAddress $nic.MacAddress
+            }
+            catch {
+                Write-Log "    Could not set static MAC for $($nic.Name): $_" -Level "WARN"
+            }
+        }
+    }
+
+    # Auto start/stop actions
+    Set-VM -VM $newVM -AutomaticStartAction $autoStart -AutomaticStopAction $autoStop -AutomaticStartDelay $autoStartDelay
+    Write-Log "  Auto Start: $autoStart | Auto Stop: $autoStop"
+
+    # Notes
+    $conversionNote = "[Converted Gen1→Gen2 on $(Get-Date -Format 'yyyy-MM-dd HH:mm')]"
+    Set-VM -VM $newVM -Notes $(if ($vmNotes) { "$vmNotes`n$conversionNote" } else { $conversionNote })
+
+    # Enable TPM
+    try {
+        $keyProtector = New-HgsGuardian -Name "UntrustedGuardian_$VMName" -GenerateCertificates -ErrorAction SilentlyContinue
+        if ($keyProtector) {
+            $kp = New-HgsKeyProtector -Owner $keyProtector -AllowUntrustedRoot
+            Set-VMKeyProtector -VM $newVM -KeyProtector $kp.RawData
+            Enable-VMTPM -VM $newVM
+            Write-Log "  TPM: Enabled" -Level "SUCCESS"
+        }
+    }
+    catch {
+        Write-Log "  TPM: Could not enable (non-critical): $_" -Level "WARN"
+    }
+
+    Write-Log "  VM configuration applied" -Level "SUCCESS"
+
+    # ── Step 7: Add to Failover Cluster ─────────────────────────────────────────
+    Write-Log ""
+    Write-Log "Step 7: Adding VM to failover cluster..."
+
+    try {
+        Add-ClusterVirtualMachineRole -VMName $VMName
+        Write-Log "  VM added to cluster" -Level "SUCCESS"
+    }
+    catch {
+        Write-Log "  Could not add to cluster: $_" -Level "WARN"
+        Write-Log "  You may need to add manually: Add-ClusterVirtualMachineRole -VMName '$VMName'" -Level "WARN"
     }
 }
 catch {
-    Write-Log "  TPM: Could not enable (non-critical): $_" -Level "WARN"
-}
-
-Write-Log "  VM configuration applied" -Level "SUCCESS"
-
-# ── Step 7: Add to Failover Cluster ─────────────────────────────────────────
-Write-Log ""
-Write-Log "Step 7: Adding VM to failover cluster..."
-
-try {
-    Add-ClusterVirtualMachineRole -VMName $VMName
-    Write-Log "  VM added to cluster" -Level "SUCCESS"
-}
-catch {
-    Write-Log "  Could not add to cluster: $_" -Level "WARN"
-    Write-Log "  You may need to add manually: Add-ClusterVirtualMachineRole -VMName '$VMName'" -Level "WARN"
+    Write-Log "STOPPED AFTER THE GEN 1 VM WAS REMOVED: $_" -Level "ERROR"
+    Write-Log "  The VHDX files were not deleted. Original disks:" -Level "ERROR"
+    foreach ($d in $diskDetails) { Write-Log "    $($d.Path)" -Level "ERROR" }
+    if ($backupDir) { Write-Log "  Verified backup: $backupDir" -Level "ERROR" }
+    Write-Log "  Saved configuration: $configPath" -Level "ERROR"
+    Write-Log "  Recreate the VM by hand from these disks (New-VM -Generation 2 -VHDPath <boot disk>), then re-run the remaining steps." -Level "ERROR"
+    throw
 }
 
 # ── Step 8: Start VM and Validate Boot ──────────────────────────────────────
@@ -464,9 +549,9 @@ Write-Log "  Generation: $($finalVM.Generation)"
 Write-Log "  State:      $($finalVM.State)"
 Write-Log "  Log:        $LogFile"
 
-if ($BackupVHDX) {
+if ($backupDir) {
     Write-Log ""
-    Write-Log "  VHDX backups are at: $(Join-Path $WorkingDirectory "Backups\$VMName")"
+    Write-Log "  VHDX backups are at: $backupDir"
     Write-Log "  Remove backups once you have confirmed everything is working."
 }
 

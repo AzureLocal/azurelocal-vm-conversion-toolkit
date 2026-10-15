@@ -1,4 +1,4 @@
-#Requires -RunAsAdministrator
+﻿#Requires -RunAsAdministrator
 
 <#
 .SYNOPSIS
@@ -242,19 +242,32 @@ foreach ($vmEntry in $readyVMs) {
     try {
         $convertScript = Join-Path $ScriptRoot "03-Convert-Gen1toGen2.ps1"
 
+        # Script 03 does not take the custom location or logical network (earlier versions of this batch
+        # passed them and every VM failed with 'parameter cannot be found'). They belong to script 05.
         $params = @{
-            VMName              = $vmName
-            WorkingDirectory    = $WorkingDirectory
-            ResourceGroup       = $ResourceGroup
-            SubscriptionId      = $SubscriptionId
-            CustomLocationId    = $CustomLocationId
-            LogicalNetworkId    = $LogicalNetworkId
-            SkipArcRegistration = $SkipArcRegistration.IsPresent
-            BackupVHDX          = $true
-            Confirm             = $false
+            VMName           = $vmName
+            WorkingDirectory = $WorkingDirectory
+            ResourceGroup    = $ResourceGroup
+            SubscriptionId   = $SubscriptionId
+            BackupVHDX       = $true
+            Confirm          = $false
         }
 
         & $convertScript @params
+
+        if (-not $SkipArcRegistration) {
+            $reconnectScript = Join-Path $ScriptRoot "05-Reconnect-AzureLocalVM.ps1"
+            $reconnectParams = @{
+                VMName           = $vmName
+                ResourceGroup    = $ResourceGroup
+                SubscriptionId   = $SubscriptionId
+                CustomLocationId = $CustomLocationId
+                LogicalNetworkId = $LogicalNetworkId
+                WorkingDirectory = $WorkingDirectory
+                Confirm          = $false
+            }
+            & $reconnectScript @reconnectParams
+        }
 
         Write-Log "  $vmName conversion completed" -Level "SUCCESS"
     }

@@ -1,4 +1,4 @@
-#Requires -RunAsAdministrator
+﻿#Requires -RunAsAdministrator
 <#
 .SYNOPSIS
     Projects an existing Gen 2 Hyper-V VM into the Azure Local management plane
@@ -19,9 +19,16 @@
     reinstallation required. The machine keeps its domain join, installed applications,
     and full OS state.
 
-    IMPORTANT: 'az stack-hci-vm reconnect-to-azure' is a Preview command.
-    Confirm it is available in your stack-hci-vm extension version before use.
-    Run 'az stack-hci-vm reconnect-to-azure --help' to verify availability.
+    PREVIEW: 'az stack-hci-vm reconnect-to-azure' belongs to the invitation-only Azure Local private
+    preview and has no public CLI reference. Do not use in production unless your tenant is enrolled.
+    Confirm it is available in your stack-hci-vm extension version before use
+    ('az stack-hci-vm reconnect-to-azure --help').
+
+    Why this script and not a copy: Microsoft lists cloning or copying an Azure Local VM as an
+    unsupported operation (it can cause corruption or management errors), and script 03 removes and
+    rebuilds the VM locally. Re-projecting the rebuilt VM with reconnect-to-azure is therefore the only
+    route this toolkit supports.
+    https://learn.microsoft.com/azure/azure-local/manage/virtual-machine-operations#unsupported-vm-operations
 
 .PARAMETER VMName
     Name of the VM as it appears in Hyper-V Manager on the cluster node.
@@ -60,10 +67,11 @@
     Requires Azure CLI with the 'stack-hci-vm' extension installed.
     Install the extension if needed: az extension add --name stack-hci-vm
     Tested against Azure Local 23H2+.
-    'az stack-hci-vm reconnect-to-azure' is in Preview — verify availability first.
+    'az stack-hci-vm reconnect-to-azure' is private-preview only — verify availability first.
+    If the VM already has an Azure Local VM resource, do not delete that resource; fix the cause and re-run.
 #>
 
-[CmdletBinding(SupportsShouldProcess)]
+[CmdletBinding(SupportsShouldProcess, ConfirmImpact = 'High')]
 param(
     [Parameter(Mandatory)]
     [string]$VMName,
@@ -150,6 +158,9 @@ Write-Host "  Azure VM Name   : $AzureVMName"
 Write-Host "  Resource Group  : $ResourceGroup"
 Write-Host "  Subscription    : $SubscriptionId"
 Write-Host ""
+Write-Host "  PREVIEW: reconnect-to-azure needs the invitation-only Azure Local private preview." -ForegroundColor Yellow
+Write-Host "           Do not use in production." -ForegroundColor Yellow
+Write-Host ""
 
 #endregion
 
@@ -232,6 +243,12 @@ if ($failures.Count -gt 0) {
 }
 
 Write-OK "All pre-flight checks passed"
+
+$proceed = $PSCmdlet.ShouldProcess("VM '$VMName' as '$AzureVMName' in '$ResourceGroup'", 'Create the NIC resource and run az stack-hci-vm reconnect-to-azure (preview)')
+if (-not $proceed -and -not $WhatIfPreference) {
+    Write-Warn "Declined. Nothing was changed."
+    return
+}
 
 #endregion
 

@@ -1,4 +1,4 @@
-#Requires -RunAsAdministrator
+﻿#Requires -RunAsAdministrator
 #Requires -Modules Az.Accounts, Az.Resources, Az.StackHCI
 
 <#

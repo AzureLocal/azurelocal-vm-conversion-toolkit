@@ -1,22 +1,29 @@
-#Requires -RunAsAdministrator
+﻿#Requires -RunAsAdministrator
 
 <#
 .SYNOPSIS
-    Converts MBR boot disk to GPT inside a running Windows Gen 1 VM (pre-conversion step).
+    Converts the MBR boot disk to GPT inside a running Windows Gen 1 VM (pre-conversion step).
 
 .DESCRIPTION
     This script runs INSIDE the guest VM (Gen 1) to:
-    - Validate the OS supports UEFI/Gen 2
-    - Validate disk layout for mbr2gpt compatibility
+    - Confirm the guest OS ships mbr2gpt.exe and that the file is actually present
+    - Validate the disk layout for mbr2gpt
+    - Make sure BitLocker protection is suspended (MBR2GPT only converts BitLocker volumes while it is)
     - Run mbr2gpt to convert the boot disk from MBR to GPT
-    - Create a conversion readiness report
 
-    IMPORTANT: Run this script inside the guest OS of each Gen 1 VM BEFORE
-    running the Gen 2 conversion script. The VM should still be running as Gen 1
-    when this script executes.
+    OS support (Microsoft Learn, mbr2gpt): mbr2gpt.exe is in the box on Windows 10 version 1703
+    (build 15063) and later and on Windows Server 2019 (build 17763) and later. Windows Server 2016
+    does not include it. Offline conversion of Windows 7, 8 and 8.1 is not supported: upgrade the
+    guest first. https://learn.microsoft.com/windows/deployment/mbr-to-gpt
+
+    IMPORTANT: Run this script inside the guest OS of each Gen 1 VM BEFORE running the Gen 2
+    conversion script, and take a backup or checkpoint-free copy of the VM first. The conversion
+    cannot be undone. The VM should still be running as Gen 1 when this script executes.
+
+    After conversion, BitLocker protectors must be deleted and recreated before protection is resumed.
 
 .PARAMETER ValidateOnly
-    Only validate — do not perform the actual conversion.
+    Only validate. Nothing is changed (BitLocker is not suspended either).
 
 .PARAMETER LogPath
     Path to write the log file. Defaults to C:\Temp\MBR2GPT_Conversion.log
@@ -40,16 +47,18 @@ param(
 
 $ErrorActionPreference = 'Stop'
 
+Import-Module (Join-Path $PSScriptRoot '..\common\ConversionSafety.psd1') -Force -ErrorAction Stop
+
 # Ensure log directory exists
 $logDir = Split-Path $LogPath -Parent
-if (-not (Test-Path $logDir)) { New-Item -Path $logDir -ItemType Directory -Force | Out-Null }
+if (-not (Test-Path $logDir)) { New-Item -Path $logDir -ItemType Directory -Force -WhatIf:$false | Out-Null }
 
 function Write-Log {
     param([string]$Message, [string]$Level = "INFO")
     $timestamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
     $entry = "[$timestamp] [$Level] $Message"
     Write-Host $entry -ForegroundColor $(switch ($Level) { "ERROR" { "Red" } "WARN" { "Yellow" } "SUCCESS" { "Green" } "FAIL" { "Red" } default { "Cyan" } })
-    Add-Content -Path $LogPath -Value $entry
+    Add-Content -Path $LogPath -Value $entry -WhatIf:$false
 }
 
 Write-Log "═══════════════════════════════════════════════════════════════"
@@ -59,36 +68,29 @@ Write-Log "═══════════════════════
 # ── Step 1: System Validation ────────────────────────────────────────────────
 Write-Log "Performing system validation checks..."
 
-# Check OS architecture
 $os = Get-CimInstance -ClassName Win32_OperatingSystem
-$arch = (Get-CimInstance -ClassName Win32_Processor).AddressWidth
+$arch = (Get-CimInstance -ClassName Win32_Processor | Select-Object -First 1).AddressWidth
+$buildNumber = [int]$os.BuildNumber
 Write-Log "  OS: $($os.Caption) $($os.Version)"
+Write-Log "  Build Number: $buildNumber"
 Write-Log "  Architecture: ${arch}-bit"
 
-if ($arch -ne 64) {
-    Write-Log "FATAL: Gen 2 VMs require 64-bit OS. This system is ${arch}-bit." -Level "ERROR"
-    throw "Cannot proceed: 32-bit OS detected."
+# OS gate: mbr2gpt.exe is in the box on Windows 10 1703+ (build 15063) and Windows Server 2019+ (build 17763).
+$support = Test-Mbr2GptOsSupport -Caption $os.Caption -BuildNumber $buildNumber -AddressWidth $arch
+if (-not $support.Supported) {
+    Write-Log "FATAL: $($support.Reason)" -Level "ERROR"
+    throw "OS not supported for in-guest MBR to GPT conversion."
 }
+Write-Log "  $($support.Reason)" -Level "SUCCESS"
 
-# Check OS version (must be Server 2012 R2+ or Windows 8.1+)
-$buildNumber = [int]$os.BuildNumber
-$isServer = $os.Caption -match "Server"
-Write-Log "  Build Number: $buildNumber"
-Write-Log "  Is Server OS: $isServer"
-
-if ($buildNumber -lt 9600) {
-    Write-Log "FATAL: OS build $buildNumber is too old. Need Server 2012 R2+ / Win 8.1+ for Gen 2." -Level "ERROR"
-    throw "OS version not supported for Gen 2."
-}
-
-# Check if mbr2gpt exists
-$mbr2gptPath = "$env:SystemRoot\System32\mbr2gpt.exe"
-if (-not (Test-Path $mbr2gptPath)) {
+# The file must really be there; the build number alone is not proof.
+$mbr2gptPath = Get-Mbr2GptPath
+if (-not (Test-Mbr2GptAvailable -Path $mbr2gptPath)) {
     Write-Log "FATAL: mbr2gpt.exe not found at $mbr2gptPath" -Level "ERROR"
-    Write-Log "  mbr2gpt is available on Windows 10 1703+ and Server 2016+." -Level "ERROR"
-    Write-Log "  For older OS, you will need to manually convert the disk." -Level "ERROR"
+    Write-Log "  It ships with Windows 10 1703+ and Windows Server 2019+. Repair or upgrade the guest, then retry." -Level "ERROR"
     throw "mbr2gpt.exe not available."
 }
+Write-Log "  mbr2gpt.exe present: $mbr2gptPath" -Level "SUCCESS"
 
 # Check current partition style
 $bootDisk = Get-Disk | Where-Object { $_.IsBoot -eq $true }
@@ -119,34 +121,50 @@ if ($primaryPartitions.Count -gt 3) {
     throw "Too many primary partitions for mbr2gpt."
 }
 
-# Partition detail dump
 Write-Log ""
 Write-Log "── Partition Layout ──"
 foreach ($part in $partitions) {
     Write-Log "  Partition $($part.PartitionNumber): Drive=$($part.DriveLetter) | Type=$($part.Type) | Size=$([math]::Round($part.Size / 1GB, 2))GB | Offset=$($part.Offset)"
 }
 
-# Check for BitLocker
+# ── BitLocker: protection must be suspended before MBR2GPT ──────────────────
 Write-Log ""
-Write-Log "Checking BitLocker status..."
-try {
-    $blStatus = Get-BitLockerVolume -MountPoint "C:" -ErrorAction SilentlyContinue
-    if ($blStatus -and $blStatus.ProtectionStatus -eq "On") {
-        Write-Log "WARNING: BitLocker is ENABLED on C:. Suspend BitLocker before conversion." -Level "WARN"
-        Write-Log "  Run: Suspend-BitLocker -MountPoint 'C:' -RebootCount 0" -Level "WARN"
+Write-Log "Checking BitLocker status on $env:SystemDrive ..."
+$blVolume = $null
+if (Get-Command Get-BitLockerVolume -ErrorAction SilentlyContinue) {
+    try { $blVolume = Get-BitLockerVolume -MountPoint $env:SystemDrive -ErrorAction Stop }
+    catch { Write-Log "Could not read BitLocker state: $_" -Level "ERROR"; throw "BitLocker state unknown; refusing to convert." }
+    $bl = Get-BitLockerConversionState -Volume $blVolume
+}
+else {
+    # No BitLocker cmdlets means the feature is not installed, so the volume cannot be BitLocker-encrypted.
+    $bl = [pscustomobject]@{ State = 'NotEncrypted'; Ready = $true }
+    Write-Log "  BitLocker cmdlets not present on this OS; treating the volume as not encrypted." -Level "INFO"
+}
+Write-Log "  BitLocker state: $($bl.State)"
 
-        if (-not $ValidateOnly) {
-            Write-Log "Suspending BitLocker automatically..." -Level "WARN"
-            Suspend-BitLocker -MountPoint "C:" -RebootCount 0
-            Write-Log "  BitLocker suspended." -Level "SUCCESS"
-        }
+if ($bl.State -eq 'Unknown') {
+    throw "BitLocker state of $env:SystemDrive could not be determined; refusing to convert."
+}
+if (-not $bl.Ready) {
+    # Protected
+    if ($ValidateOnly) {
+        Write-Log "  BitLocker protection is ON. The real run would suspend it first (Suspend-BitLocker -RebootCount 0)." -Level "WARN"
     }
     else {
-        Write-Log "  BitLocker: Not active or not enabled" -Level "SUCCESS"
+        Write-Log "  BitLocker protection is ON; MBR2GPT only converts while it is suspended." -Level "WARN"
+        if (-not $PSCmdlet.ShouldProcess("BitLocker on $env:SystemDrive", "Suspend protection (RebootCount 0) so mbr2gpt can run")) {
+            Write-Log "BitLocker suspension declined. Nothing was changed." -Level "WARN"
+            exit 1
+        }
+        Suspend-BitLocker -MountPoint $env:SystemDrive -RebootCount 0
+        $bl = Get-BitLockerConversionState -Volume (Get-BitLockerVolume -MountPoint $env:SystemDrive)
+        if (-not $bl.Ready) {
+            Write-Log "BitLocker protection is still $($bl.State) after Suspend-BitLocker." -Level "ERROR"
+            throw "BitLocker is not suspended; refusing to convert."
+        }
+        Write-Log "  BitLocker suspended (verified)." -Level "SUCCESS"
     }
-}
-catch {
-    Write-Log "  BitLocker check skipped (not available on this OS edition)" -Level "INFO"
 }
 
 # ── Step 2: mbr2gpt Validation ──────────────────────────────────────────────
@@ -176,10 +194,13 @@ if (Test-Path $mbr2gptLog) {
 
 if ($validateResult.ExitCode -ne 0) {
     Write-Log "VALIDATION FAILED (Exit Code: $($validateResult.ExitCode))" -Level "FAIL"
+    if ($validateResult.ExitCode -eq 6) {
+        Write-Log "  Exit code 6: a volume on the disk is encrypted. Suspend BitLocker protection and retry." -Level "INFO"
+    }
     Write-Log "  Common causes:" -Level "INFO"
-    Write-Log "    - More than 3 primary partitions" -Level "INFO"
+    Write-Log "    - More than 3 primary partitions, or an extended/logical partition" -Level "INFO"
     Write-Log "    - Unrecognized partition types" -Level "INFO"
-    Write-Log "    - Disk layout incompatible with UEFI boot" -Level "INFO"
+    Write-Log "    - Not enough unallocated space for the GPT structures" -Level "INFO"
     Write-Log "  Check C:\Windows\setupact.log for detailed mbr2gpt diagnostics." -Level "INFO"
     throw "mbr2gpt validation failed."
 }
@@ -191,7 +212,12 @@ if ($ValidateOnly) {
     Write-Log ""
     Write-Log "═══════════════════════════════════════════════════════════════"
     Write-Log "  VALIDATE ONLY MODE — No changes were made."
-    Write-Log "  This VM IS eligible for MBR → GPT conversion."
+    if ($bl.Ready) {
+        Write-Log "  This VM IS eligible for MBR → GPT conversion."
+    }
+    else {
+        Write-Log "  Layout is eligible, but BitLocker protection is ON and must be suspended first."
+    }
     Write-Log "  Re-run without -ValidateOnly to perform the conversion."
     Write-Log "═══════════════════════════════════════════════════════════════"
     exit 0
@@ -200,7 +226,8 @@ if ($ValidateOnly) {
 Write-Log ""
 Write-Log "╔═══════════════════════════════════════════════════════════════╗"
 Write-Log "║  PERFORMING MBR → GPT CONVERSION                            ║"
-Write-Log "║  This modifies the boot disk partition table!                ║"
+Write-Log "║  This modifies the boot disk partition table and cannot be   ║"
+Write-Log "║  undone. Make sure the VM has been backed up.                ║"
 Write-Log "╚═══════════════════════════════════════════════════════════════╝"
 
 if (-not $PSCmdlet.ShouldProcess("Boot Disk $($bootDisk.Number)", "Convert MBR to GPT")) {
@@ -219,20 +246,24 @@ $stderr = Get-Content "$logDir\mbr2gpt_convert_stderr.txt" -Raw -ErrorAction Sil
 if ($stdout) { Write-Log "  stdout: $stdout" }
 if ($stderr) { Write-Log "  stderr: $stderr" -Level "WARN" }
 
-if ($convertResult.ExitCode -ne 0) {
+if ($convertResult.ExitCode -eq 100) {
+    Write-Log "CONVERTED WITH WARNINGS (Exit Code 100): the layout is GPT but some boot configuration entries could not be restored." -Level "WARN"
+    Write-Log "  Check C:\Windows\setupact.log and verify the boot entries before powering the VM off." -Level "WARN"
+}
+elseif ($convertResult.ExitCode -ne 0) {
     Write-Log "CONVERSION FAILED (Exit Code: $($convertResult.ExitCode))" -Level "FAIL"
     Write-Log "  The disk may be in an inconsistent state!" -Level "ERROR"
     Write-Log "  Check C:\Windows\setupact.log immediately." -Level "ERROR"
     throw "mbr2gpt conversion failed!"
 }
-
-Write-Log "  MBR → GPT conversion SUCCEEDED" -Level "SUCCESS"
+else {
+    Write-Log "  MBR → GPT conversion SUCCEEDED" -Level "SUCCESS"
+}
 
 # ── Step 4: Post-Conversion Verification ─────────────────────────────────────
 Write-Log ""
 Write-Log "Verifying conversion..."
 
-# Refresh disk info
 $bootDiskPost = Get-Disk | Where-Object { $_.IsBoot -eq $true }
 Write-Log "  Partition Style: $($bootDiskPost.PartitionStyle)"
 
@@ -244,7 +275,6 @@ else {
     Write-Log "  This may require a reboot to refresh. The conversion log indicates success." -Level "WARN"
 }
 
-# Check for EFI System Partition
 $efiPartition = Get-Partition -DiskNumber $bootDiskPost.Number | Where-Object { $_.GptType -eq "{c12a7328-f81f-11d2-ba4b-00a0c93ec93b}" }
 if ($efiPartition) {
     Write-Log "  EFI System Partition found: Partition $($efiPartition.PartitionNumber), Size: $([math]::Round($efiPartition.Size / 1MB, 0))MB" -Level "SUCCESS"
@@ -262,6 +292,7 @@ Write-Log "  IMPORTANT NEXT STEPS:"
 Write-Log "  1. SHUT DOWN this VM (do NOT reboot — it won't boot as Gen 1 with GPT)"
 Write-Log "  2. Run 03-Convert-Gen1toGen2.ps1 on the Hyper-V host / Azure Local node"
 Write-Log "     to recreate this VM as Gen 2"
+Write-Log "  3. If BitLocker was used: delete and recreate the protectors before resuming protection"
 Write-Log ""
 Write-Log "  ⚠️  DO NOT power on this VM as Gen 1 after conversion — it will fail to boot!"
 Write-Log "═══════════════════════════════════════════════════════════════"
