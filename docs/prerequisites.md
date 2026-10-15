@@ -104,7 +104,8 @@ For each VM being converted, the guest OS must meet these requirements before ru
 | Requirement | Details |
 |---|---|
 | **OS bitness** | 64-bit only — `mbr2gpt.exe` does not support 32-bit Windows |
-| **Windows version** | Windows Server 2012 R2+ or Windows 10+ (build 10.0.14393+) |
+| **Windows version** | Windows Server 2019 or later (build 17763+), or Windows 10 1703 or later (build 15063+). `mbr2gpt.exe` ships only with those: Windows Server 2016 does not include it, and offline conversion of Windows 7, 8 and 8.1 is not supported ([Learn](https://learn.microsoft.com/windows/deployment/mbr-to-gpt)). Upgrade older guests first. Script 02 also confirms the file exists. |
+| **BitLocker** | Protection must be suspended while MBR2GPT runs. Script 02 suspends it (after asking), verifies that, and you recreate the protectors afterwards. |
 | **Partition count** | Maximum 3 primary partitions on the boot disk |
 | **Partition type** | No extended or logical partitions on the boot disk |
 | **Integration Services** | Hyper-V Integration Services installed and current (required for synthetic NIC handoff) |

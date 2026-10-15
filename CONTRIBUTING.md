@@ -12,7 +12,7 @@ Thank you for your interest in contributing to the Azure Local VM Conversion Too
 
 ### Reporting Bugs
 
-Use the [bug report issue template](.github/ISSUE_TEMPLATE/bug_report.md). Include:
+Use the [bug report issue template](https://github.com/AzureLocal/azurelocal-vm-conversion-toolkit/issues/new). Include:
 - Azure Local version (22H2, 23H2, etc.)
 - Windows Server version running inside the guest VM
 - Which script failed and at which step
@@ -20,7 +20,7 @@ Use the [bug report issue template](.github/ISSUE_TEMPLATE/bug_report.md). Inclu
 
 ### Suggesting Features
 
-Use the [feature request issue template](.github/ISSUE_TEMPLATE/feature_request.md). Describe the use case, not just the solution.
+Use the [feature request issue template](https://github.com/AzureLocal/azurelocal-vm-conversion-toolkit/issues/new). Describe the use case, not just the solution.
 
 ### Submitting Pull Requests
 

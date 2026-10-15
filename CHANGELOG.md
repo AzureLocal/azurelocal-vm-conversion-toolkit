@@ -10,6 +10,25 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+### Safety
+
+- Script 02: the OS gate now matches Microsoft Learn (Windows Server 2019 / Windows 10 1703 or later; Server 2016 has no `mbr2gpt.exe`), the file must really exist, and BitLocker protection must be suspended and is re-checked after suspending. Exit code 100 is reported as converted-with-warnings.
+- Script 03: every disk file (and differencing parents) is copied to a timestamped folder and verified by size and SHA256 before the VM is removed; the removal is gated on that proof. `-BackupVHDX:$false` needs `-IUnderstandNoBackup`. Free space is checked first, existing backups are never overwritten, `-WhatIf` copies and removes nothing, a VM with no NIC is refused before removal, and a failure after removal prints where the disks and backup are.
+- Script 05 and the docs state that `reconnect-to-azure` is invitation-only private preview; the docs no longer suggest deleting the Azure resource to undo a reconnect.
+
+### Fixed
+
+- `scripts/azurelocal/04-Batch-ConvertVMs.ps1` passed parameters script 03 does not have, so every VM failed; it now runs 03 then 05.
+- README links pointed at `.adoc` files that were migrated to `.md`.
+- The VitePress nav and sidebar gave `Reference` an object instead of a list, so the docs build logged `items is not iterable` on every page.
+
+### Added
+
+- `scripts/common/ConversionSafety` (testable gates), Pester 5 unit tests (`tests/Unit`), PSScriptAnalyzer settings, `tests/Invoke-Checks.ps1`, a pull-request CI workflow and release-please. Version 0.1.0 is recorded in the manifests only; nothing is tagged.
+- Azure Migrate positioning in the README and docs.
+
+### Added (earlier, unreleased)
+
 ### Added
 - Initial release of the Azure Local VM Conversion Toolkit
 - Two fully separate script paths — `scripts/hyperv/` (Hyper-V only, no Azure) and `scripts/azurelocal/` (Azure Local portal-managed)

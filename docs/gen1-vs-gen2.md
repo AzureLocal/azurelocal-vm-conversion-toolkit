@@ -72,7 +72,7 @@ Gen 2 VMs on Azure Local 23H2+ benefit from automatic Arc enrollment via the VM 
 
 ### Live Migration and Clustering
 
-Both Gen 1 and Gen 2 VMs are fully supported in Azure Local failover clusters. Generation has no impact on live migration, cluster-aware updating, or VM availability.
+Both Gen 1 and Gen 2 VMs are fully supported in Azure Local failover clusters. Generation has no impact on live migration, cluster-aware updating, or VM availability. Gen 1 VMs do, however, have [limitations in Azure Local VM management](https://learn.microsoft.com/azure/azure-local/manage/azure-arc-vm-management-overview#limitations-of-azure-local-vm-management), and Azure Migrate keeps the source generation, so a Gen 1 source stays Gen 1 after migration.
 
 ### Azure Local 23H2 New VM Defaults
 
@@ -115,7 +115,7 @@ If you have decided to proceed with conversion, there are two distinct paths dep
 | **Workload preserved?** | ✓ Yes — no Sysprep, no identity loss | ✓ Yes — existing OS, apps, and domain join intact |
 | **Machine SID / domain join** | ✓ Preserved | ✓ Preserved |
 | **Downtime** | 5–15 minutes + VHDX backup time (reconnect step adds minimal time, no additional downtime) | 5–15 minutes + VHDX backup time |
-| **Rollback** | VHDX backup restore; reconnect can be undone by deleting the Azure resource (Hyper-V VM is unaffected) | VHDX backup restore |
+| **Rollback** | VHDX backup restore; do not delete the Azure VM resource to undo a reconnect (fix the cause and re-run) | VHDX backup restore |
 | **Management plane** | Azure portal / Azure CLI / ARM | Hyper-V Manager / Failover Cluster Manager |
 | **Arc projection** | Automatic via Arc resource bridge after `reconnect-to-azure` | Manual or via existing cluster Arc registration |
 | **Key command** | `az stack-hci-vm reconnect-to-azure` (script 05) — Preview | `New-VM -Generation 2` (script 03) |

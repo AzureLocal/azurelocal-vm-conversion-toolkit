@@ -3,9 +3,11 @@
 ![Azure Local VM Conversion Toolkit](assets/images/azurelocal-vm-conversion-toolkit-banner.svg)
 
 > [!WARNING]
-> **Under Active Development**
-> This repository is a work in progress. Scripts, templates, and automation are **not guaranteed to work** at this time. Use at your own risk and expect breaking changes.
+> **PREVIEW: the Azure Local path needs the invitation-only Azure Local private preview. Do not use it in production.**
+> Script 05 runs `az stack-hci-vm reconnect-to-azure`, which has no public CLI reference; Microsoft documents the sibling preview commands as available only to customers in the invitation-only private preview ([CLI reference](https://learn.microsoft.com/cli/azure/stack-hci-vm)). The Hyper-V path does not use Azure. Version 0.1.0, not yet released or tagged.
 >
+> **Azure Migrate keeps the source generation** (a Gen 1 source stays Gen 1), and [Gen 1 VMs have limitations in Azure Local VM management](https://learn.microsoft.com/azure/azure-local/manage/azure-arc-vm-management-overview#limitations-of-azure-local-vm-management). That is why this toolkit exists. If Gen 1 is acceptable, [Azure Migrate](https://learn.microsoft.com/azure/azure-local/migrate/migration-options-overview) (with its [Arc-reuse feature](https://learn.microsoft.com/azure/azure-local/migrate/migrate-arc-reuse)) is the supported migration route.
+
 Convert Gen 1 virtual machines to Gen 2 on Azure Local and Hyper-V environments.
 
 ## Overview

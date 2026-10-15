@@ -63,7 +63,8 @@ If validation fails, see [mbr2gpt fails validation](troubleshooting.md#mbr2gpt-f
 Requirements:
 
 - 64-bit Windows only (`mbr2gpt.exe` does not support 32-bit)
-- Windows Server 2012 R2 / Windows 10 build 14393 or later
+- Windows Server 2019 or later, or Windows 10 1703 (build 15063) or later (Windows Server 2016 has no `mbr2gpt.exe`; Windows 7, 8 and 8.1 are not supported)
+- BitLocker protection suspended (script 02 does this for you after asking)
 - Boot disk must have 3 or fewer primary partitions, no extended/logical partitions
 - Hyper-V Integration Services installed and current
 
@@ -231,7 +232,7 @@ Get-Disk | Select-Object Number, PartitionStyle, FriendlyName
 
 If the VM fails to boot, see [VM Won't Boot After Gen 2 Conversion](troubleshooting.md#vm-wont-boot).
 
-If you need to roll back, see [Rolling Back a Failed Conversion](troubleshooting.md#rolling-back-a-failed-conversion) — VHDX backups are in `WorkingDirectory\Backups\<VMName>\`.
+If you need to roll back, see [Rolling Back a Failed Conversion](troubleshooting.md#rolling-back-a-failed-conversion) — VHDX backups are in `WorkingDirectory\Backups\<VMName>\<timestamp>\`.
 
 ---
 

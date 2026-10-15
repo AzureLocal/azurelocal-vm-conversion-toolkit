@@ -35,7 +35,7 @@
     Mount-VHD -Path "C:\ClusterStorage\Volume01\...\VMName_OS.vhdx" -ReadOnly
     ```
 
-1. If you need to roll back, the original VHDX backup is in `WorkingDirectory\Backups\VMName\`.
+1. If you need to roll back, the original VHDX backup is in `WorkingDirectory\Backups\VMName\<timestamp>\`.
 
 ---
 
@@ -133,7 +133,7 @@ Linux VMs require additional manual steps — the scripts handle the Hyper-V/clu
 
 ## Rolling Back a Failed Conversion { #rolling-back-a-failed-conversion }
 
-Each VM's VHDX files are backed up to `WorkingDirectory\Backups\VMName\` before the Gen 1 VM is removed.
+Each VM's VHDX files are backed up to `WorkingDirectory\Backups\VMName\<timestamp>\` before the Gen 1 VM is removed.
 
 To restore:
 

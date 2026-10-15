@@ -18,5 +18,8 @@ existing Azure Arc management registrations.
 
 ## Status
 
-Active, early — under active development, not fully tested across all
-configurations.
+Preview, version 0.1.0, no releases or tags. The Azure Local path (script 05) depends on a
+command from the invitation-only Azure Local private preview, so it is not for production.
+Unit tests (Pester 5, everything mocked) run on every pull request; there is no live proof yet
+on a production cluster. Azure Migrate keeps the source generation, so this toolkit is for the
+case where the VM must become Gen 2.

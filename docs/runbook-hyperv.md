@@ -97,7 +97,7 @@ Run from the cluster node after the guest VM is shut down.
 Specifically, the script:
 
 1. Captures all settings (CPU, memory, NIC, VLAN, disk paths) from the Gen 1 VM
-1. Backs up the VHDX files to `WorkingDirectory\Backups\`
+1. Copies the VHDX files (and any parent disks) to `WorkingDirectory\Backups\<VM>\<timestamp>` and verifies each copy by size and SHA256; the VM is not removed unless every file verified
 1. Removes the Gen 1 VM from the failover cluster and Hyper-V (`Remove-VM`) — the VM config is gone at this point
 1. Creates a new Gen 2 VM (`New-VM -Generation 2`) with the same name
 1. Reattaches the original VHDX files to the new VM
