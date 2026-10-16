@@ -10,11 +10,12 @@ PowerShell toolkit for converting Hyper-V Gen 1 VMs to Gen 2 on Azure Local whil
 
 ---
 
-> **PREVIEW: the Azure Local path needs the invitation-only Azure Local private preview. Do not use it in production.**
+> **Internal tool. Private repository, not for distribution.**
 >
-> Script 05 runs `az stack-hci-vm reconnect-to-azure`, which has no public CLI reference. Microsoft documents the sibling preview commands as "available only to customers participating in the invitation-only Azure Local private preview" ([CLI reference](https://learn.microsoft.com/cli/azure/stack-hci-vm)). The Hyper-V path (scripts 01-04 under `scripts/hyperv/`) does not use Azure at all.
+> **Status: work in progress, version 0.1.0, no releases or tags, not yet verified end to end on a live cluster.**
+> Script 05 runs `az stack-hci-vm reconnect-to-azure` and needs an Azure CLI `stack-hci-vm` extension version that provides it; check with `az extension show --name stack-hci-vm` and `az stack-hci-vm -h`. The Hyper-V path (scripts 01-04 under `scripts/hyperv/`) does not use Azure at all.
 >
-> **Version 0.1.0, no releases or tags.** The scripts have not been run against a production cluster. Unit tests (`tests/Unit`, Pester 5) mock every Hyper-V, cluster, disk, BitLocker and `az` call; they do not replace a live proof.
+> Unit tests (`tests/Unit`, Pester 5) mock every Hyper-V, cluster, disk, BitLocker and `az` call; they do not replace a live proof.
 
 > **⚠️ USE AT YOUR OWN RISK**
 >
@@ -26,7 +27,7 @@ PowerShell toolkit for converting Hyper-V Gen 1 VMs to Gen 2 on Azure Local whil
 
 Azure Migrate keeps the generation of the source VM: a Gen 1 source stays Gen 1 on Azure Local ([Learn](https://learn.microsoft.com/azure/azure-local/migrate/migrate-hyperv-requirements#considerations-for-migrating-hyper-v-vms-to-azure-local)). Gen 1 VMs have [limitations in Azure Local VM management](https://learn.microsoft.com/azure/azure-local/manage/azure-arc-vm-management-overview#limitations-of-azure-local-vm-management), and there is no in-place Gen 1 to Gen 2 upgrade. That gap is what this toolkit covers. If you are migrating VMs onto Azure Local and Gen 1 is acceptable, use [Azure Migrate](https://learn.microsoft.com/azure/azure-local/migrate/migration-options-overview) (its [Arc-reuse feature](https://learn.microsoft.com/azure/azure-local/migrate/migrate-arc-reuse) keeps an existing Azure Arc resource). Use this toolkit when the VM must become Gen 2.
 
-Microsoft lists [cloning or copying an Azure Local VM as an unsupported operation](https://learn.microsoft.com/azure/azure-local/manage/virtual-machine-operations#unsupported-vm-operations). Script 03 removes the Gen 1 VM and rebuilds it from the same disks rather than copying it, and `reconnect-to-azure` (script 05, preview) is the only route this toolkit supports for putting the rebuilt VM back under Azure management.
+Microsoft lists [cloning or copying an Azure Local VM as an unsupported operation](https://learn.microsoft.com/azure/azure-local/manage/virtual-machine-operations#unsupported-vm-operations). Script 03 removes the Gen 1 VM and rebuilds it from the same disks rather than copying it, and `reconnect-to-azure` (script 05) is the only route this toolkit supports for putting the rebuilt VM back under Azure management.
 
 ## What This Does
 

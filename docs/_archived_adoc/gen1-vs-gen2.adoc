@@ -198,7 +198,7 @@ If you have decided to proceed with conversion, there are two distinct paths dep
 | Manual or via existing cluster Arc registration
 
 | *Key command*
-| `az stack-hci-vm reconnect-to-azure` (script 05) — Preview
+| `az stack-hci-vm reconnect-to-azure` (script 05)
 | `New-VM -Generation 2` (script 03)
 
 | *Best for*

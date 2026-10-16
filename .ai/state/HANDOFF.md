@@ -14,3 +14,8 @@
 - **Branch:** main — committed: yes — pushed: no
 - **Blockers:** None
 - **Exact next steps:** Fill in .ai/memory/PROJECT_CONTEXT.md and .ai/memory/COMMANDS.md with real repo-specific detail.
+
+## 16 Oct 2026
+
+- **What changed and why:** Wording made neutral (no third-party programme wording); README and docs carry an Internal notice. Repository stays private until the owner confirms it works end to end.
+- **Next steps:** Live end-to-end verification of script 05 on a cluster with a suitable `stack-hci-vm` extension.

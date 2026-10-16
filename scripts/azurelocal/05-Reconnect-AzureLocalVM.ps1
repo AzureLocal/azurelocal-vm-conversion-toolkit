@@ -19,10 +19,9 @@
     reinstallation required. The machine keeps its domain join, installed applications,
     and full OS state.
 
-    PREVIEW: 'az stack-hci-vm reconnect-to-azure' belongs to the invitation-only Azure Local private
-    preview and has no public CLI reference. Do not use in production unless your tenant is enrolled.
-    Confirm it is available in your stack-hci-vm extension version before use
-    ('az stack-hci-vm reconnect-to-azure --help').
+    Internal tool, work in progress, not yet verified end to end on a live cluster. Do not use in
+    production. Needs a stack-hci-vm extension version that provides the reconnect operation:
+    confirm with 'az stack-hci-vm reconnect-to-azure --help'.
 
     Why this script and not a copy: Microsoft lists cloning or copying an Azure Local VM as an
     unsupported operation (it can cause corruption or management errors), and script 03 removes and
@@ -67,7 +66,7 @@
     Requires Azure CLI with the 'stack-hci-vm' extension installed.
     Install the extension if needed: az extension add --name stack-hci-vm
     Tested against Azure Local 23H2+.
-    'az stack-hci-vm reconnect-to-azure' is private-preview only — verify availability first.
+    'az stack-hci-vm reconnect-to-azure' depends on the extension version — verify it first.
     If the VM already has an Azure Local VM resource, do not delete that resource; fix the cause and re-run.
 #>
 
@@ -158,7 +157,7 @@ Write-Host "  Azure VM Name   : $AzureVMName"
 Write-Host "  Resource Group  : $ResourceGroup"
 Write-Host "  Subscription    : $SubscriptionId"
 Write-Host ""
-Write-Host "  PREVIEW: reconnect-to-azure needs the invitation-only Azure Local private preview." -ForegroundColor Yellow
+Write-Host "  WORK IN PROGRESS: internal tool, not yet verified end to end on a live cluster." -ForegroundColor Yellow
 Write-Host "           Do not use in production." -ForegroundColor Yellow
 Write-Host ""
 
@@ -192,14 +191,14 @@ catch {
     $failures.Add("Could not check Azure CLI extension: $_")
 }
 
-# ── reconnect-to-azure command available (preview check) ─────────────────────
+# ── reconnect-to-azure command available (extension check) ─────────────────────
 try {
     $helpOutput = & az stack-hci-vm reconnect-to-azure --help 2>&1
     if ($LASTEXITCODE -ne 0 -or ($helpOutput -join '') -match 'is not in the') {
         $failures.Add("'az stack-hci-vm reconnect-to-azure' is not available in your extension version. Update with: az extension update --name stack-hci-vm")
     }
     else {
-        Write-OK "reconnect-to-azure command is available (Preview)"
+        Write-OK "reconnect-to-azure command is available"
     }
 }
 catch {
@@ -244,7 +243,7 @@ if ($failures.Count -gt 0) {
 
 Write-OK "All pre-flight checks passed"
 
-$proceed = $PSCmdlet.ShouldProcess("VM '$VMName' as '$AzureVMName' in '$ResourceGroup'", 'Create the NIC resource and run az stack-hci-vm reconnect-to-azure (preview)')
+$proceed = $PSCmdlet.ShouldProcess("VM '$VMName' as '$AzureVMName' in '$ResourceGroup'", 'Create the NIC resource and run az stack-hci-vm reconnect-to-azure')
 if (-not $proceed -and -not $WhatIfPreference) {
     Write-Warn "Declined. Nothing was changed."
     return

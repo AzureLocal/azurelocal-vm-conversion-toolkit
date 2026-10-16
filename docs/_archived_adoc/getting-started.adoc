@@ -40,7 +40,7 @@ Choose *one* based on how the converted VM needs to be managed after conversion.
 | Exists only if your cluster was already Arc-registered separately
 
 | *Extra step after Gen 2 conversion*
-| `az stack-hci-vm reconnect-to-azure` (Preview)
+| `az stack-hci-vm reconnect-to-azure`
 | None
 
 | *Best for*
@@ -203,7 +203,7 @@ Quick reference — run these four steps in order:
     -LogicalNetworkId "/subscriptions/.../logicalNetworks/mgmt-lnet"
 ----
 
-CAUTION: `az stack-hci-vm reconnect-to-azure` is a *Preview* command. Confirm it is available in your `stack-hci-vm` extension before running Step 4: `az stack-hci-vm reconnect-to-azure --help`
+CAUTION: `az stack-hci-vm reconnect-to-azure` must exist in your `stack-hci-vm` extension version. Confirm before running Step 4: `az stack-hci-vm reconnect-to-azure --help`
 
 '''
 

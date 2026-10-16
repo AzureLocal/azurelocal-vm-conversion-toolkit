@@ -18,7 +18,7 @@ Choose **one** based on how the converted VM needs to be managed after conversio
 | **VM visible in Azure portal?** | Yes — full `Microsoft.AzureStackHCI/virtualMachineInstances` resource | No — Hyper-V Manager and Failover Cluster Manager only |
 | **Azure portal operations** | Start/stop, extensions, RBAC, monitoring | Not available |
 | **Arc registration** | Automatic via Arc resource bridge after reconnect | Exists only if your cluster was already Arc-registered separately |
-| **Extra step after Gen 2 conversion** | `az stack-hci-vm reconnect-to-azure` (Preview) | None |
+| **Extra step after Gen 2 conversion** | `az stack-hci-vm reconnect-to-azure` | None |
 | **Best for** | Azure Local 23H2+ — standardizing on portal-managed VMs | Hyper-V-managed clusters, no portal management requirement |
 
 ### Use Path 1 — Azure Local if:
@@ -165,7 +165,7 @@ Quick reference — run these four steps in order:
 ```
 
 > [!CAUTION]
-> `az stack-hci-vm reconnect-to-azure` is a **Preview** command. Confirm it is available in your `stack-hci-vm` extension before running Step 4: `az stack-hci-vm reconnect-to-azure --help`
+> `az stack-hci-vm reconnect-to-azure` must exist in your `stack-hci-vm` extension version. Confirm before running Step 4: `az stack-hci-vm reconnect-to-azure --help`
 >
 ---
 

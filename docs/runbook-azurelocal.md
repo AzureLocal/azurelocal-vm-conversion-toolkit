@@ -7,10 +7,10 @@
     **This path IS workload-preserving.** The VM keeps its machine identity, domain join, installed applications, and all OS state. No Sysprep. No reinstallation. The same converted Gen 2 VM that runs in Hyper-V is reconnected into the Azure control plane using `az stack-hci-vm reconnect-to-azure`.
 
 > [!WARNING]
-> **PREVIEW: the Azure Local path needs the invitation-only Azure Local private preview. Do not use it in production.**
-> Script 05 runs `az stack-hci-vm reconnect-to-azure`, which has no public CLI reference; Microsoft documents the sibling preview commands as available only to customers in the invitation-only private preview ([CLI reference](https://learn.microsoft.com/cli/azure/stack-hci-vm)). The Hyper-V path does not use Azure. Version 0.1.0, not yet released or tagged.
+> **Internal tool, work in progress, not yet verified end to end on a live cluster.** Private repository, not for distribution. Do not use in production.
+> Script 05 runs `az stack-hci-vm reconnect-to-azure` and needs a `stack-hci-vm` extension version that provides it (`az stack-hci-vm -h`). The Hyper-V path does not use Azure. Version 0.1.0, not released or tagged.
 >
-> **Azure Migrate keeps the source generation** (a Gen 1 source stays Gen 1), and [Gen 1 VMs have limitations in Azure Local VM management](https://learn.microsoft.com/azure/azure-local/manage/azure-arc-vm-management-overview#limitations-of-azure-local-vm-management). That is why this toolkit exists. If Gen 1 is acceptable, [Azure Migrate](https://learn.microsoft.com/azure/azure-local/migrate/migration-options-overview) (with its [Arc-reuse feature](https://learn.microsoft.com/azure/azure-local/migrate/migrate-arc-reuse)) is the supported migration route.
+> **Azure Migrate keeps the source generation** (a Gen 1 source stays Gen 1), and [Gen 1 VMs have limitations in Azure Local VM management](https://learn.microsoft.com/azure/azure-local/manage/azure-arc-vm-management-overview#limitations-of-azure-local-vm-management). That is why this toolkit exists. If Gen 1 is acceptable, [Azure Migrate](https://learn.microsoft.com/azure/azure-local/migrate/migration-options-overview) (with its [Arc-reuse feature](https://learn.microsoft.com/azure/azure-local/migrate/migrate-arc-reuse)) is the tool for that.
 
 !!! warning
     Ensure all prerequisites are satisfied before you begin. See [Prerequisites](prerequisites.md).
@@ -199,7 +199,7 @@ az account show --query id -o tsv
 ## Important Notes
 
 - **Downtime**: Each VM has downtime from shutdown (Step 2) through Gen 2 first boot (end of Step 3) — typically 5–15 minutes plus VHDX backup time. The reconnect step (Step 4) does not require downtime.
-- **Rollback**: VHDX backups taken in Step 3 enable rollback — recreate the Gen 1 VM and attach the backup copies. See [Rolling Back a Failed Conversion](troubleshooting.md#rolling-back-a-failed-conversion). Do not delete the Azure VM resource to undo a reconnect: Microsoft's guidance for failed reconnects is to fix the cause and re-run, and deleting a VM resource can destroy the VM.
-- **Preview caveat**: `reconnect-to-azure` is a preview command. Confirm it is available in your `stack-hci-vm` extension version before use. Run `az stack-hci-vm reconnect-to-azure --help` to verify.
+- **Rollback**: VHDX backups taken in Step 3 enable rollback — recreate the Gen 1 VM and attach the backup copies. See [Rolling Back a Failed Conversion](troubleshooting.md#rolling-back-a-failed-conversion). Do not delete the Azure VM resource to undo a reconnect: the safe response to a failed reconnect is to fix the cause and re-run, and deleting a VM resource can destroy the VM.
+- **Extension requirement**: `reconnect-to-azure` must exist in your `stack-hci-vm` extension version. Run `az stack-hci-vm reconnect-to-azure --help` to verify.
 - **Arc projection**: The VM is Arc-projected by the Azure Local platform via the Arc resource bridge once reconnected. You do not install the Connected Machine agent manually.
 - **Existing Arc registration**: If script 03 already re-registered the VM with Arc as a plain Arc-enabled server, the reconnect step will reconcile that into a full `virtualMachineInstances` resource.

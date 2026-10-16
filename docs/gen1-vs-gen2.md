@@ -118,7 +118,7 @@ If you have decided to proceed with conversion, there are two distinct paths dep
 | **Rollback** | VHDX backup restore; do not delete the Azure VM resource to undo a reconnect (fix the cause and re-run) | VHDX backup restore |
 | **Management plane** | Azure portal / Azure CLI / ARM | Hyper-V Manager / Failover Cluster Manager |
 | **Arc projection** | Automatic via Arc resource bridge after `reconnect-to-azure` | Manual or via existing cluster Arc registration |
-| **Key command** | `az stack-hci-vm reconnect-to-azure` (script 05) — Preview | `New-VM -Generation 2` (script 03) |
+| **Key command** | `az stack-hci-vm reconnect-to-azure` (script 05) | `New-VM -Generation 2` (script 03) |
 | **Best for** | VMs that must be managed from the Azure portal alongside other Azure Local resources | VMs that need minimal downtime and Hyper-V-only management |
 
 ### Use Path 1 (Azure Local VM) if:

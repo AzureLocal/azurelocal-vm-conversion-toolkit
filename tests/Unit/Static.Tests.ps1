@@ -54,7 +54,7 @@ Describe 'Wording' {
             Where-Object { $_.FullName -notmatch '[\\/](\.git|node_modules|archive|styles|_archived_adoc|\.vitepress)[\\/]' -and $_.Name -ne 'Static.Tests.ps1' }
     }
     It 'has no lab or vendor names and no private release number' {
-        ($script:Texts | Select-String -Pattern 'tplab|tierpoint|azrl\.mgmt|\b2690\b') | Should -BeNullOrEmpty
+        ($script:Texts | Select-String -Pattern 'tpl[a]b|tier[p]oint|azrl\.mgmt|\b26[9]0\b') | Should -BeNullOrEmpty
     }
     It 'no longer states the wrong OS rule' {
         $hits = $script:Texts | Where-Object { $_.Name -ne 'CHANGELOG.md' } |
@@ -66,8 +66,11 @@ Describe 'Wording' {
         $r | Should -Match 'Windows Server 2019'
         $r | Should -Match '1703'
     }
-    It 'README and docs say the preview command is invitation-only' {
-        (Get-Content (Join-Path $script:Root 'README.md') -Raw) | Should -Match 'invitation-only'
+    It 'README carries the internal-tool notice' {
+        (Get-Content (Join-Path $script:Root 'README.md') -Raw) | Should -Match 'Internal tool'
+    }
+    It 'prose has no private-preview or invitation wording' {
+        ($script:Texts | Where-Object { $_.Name -ne 'CHANGELOG.md' } | Select-String -Pattern 'private[ -]preview|invitation|not available for general|preview[ -]enrolled') | Should -BeNullOrEmpty
     }
     It 'README explains Azure Migrate keeps the source generation' {
         (Get-Content (Join-Path $script:Root 'README.md') -Raw) | Should -Match 'Azure Migrate'

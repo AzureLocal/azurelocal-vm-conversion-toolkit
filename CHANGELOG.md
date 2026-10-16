@@ -14,7 +14,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 - Script 02: the OS gate now matches Microsoft Learn (Windows Server 2019 / Windows 10 1703 or later; Server 2016 has no `mbr2gpt.exe`), the file must really exist, and BitLocker protection must be suspended and is re-checked after suspending. Exit code 100 is reported as converted-with-warnings.
 - Script 03: every disk file (and differencing parents) is copied to a timestamped folder and verified by size and SHA256 before the VM is removed; the removal is gated on that proof. `-BackupVHDX:$false` needs `-IUnderstandNoBackup`. Free space is checked first, existing backups are never overwritten, `-WhatIf` copies and removes nothing, a VM with no NIC is refused before removal, and a failure after removal prints where the disks and backup are.
-- Script 05 and the docs state that `reconnect-to-azure` is invitation-only private preview; the docs no longer suggest deleting the Azure resource to undo a reconnect.
+- Script 05 and the docs state the extension requirement for `reconnect-to-azure` and the internal, work-in-progress status; the docs no longer suggest deleting the Azure resource to undo a reconnect.
 
 ### Fixed
 

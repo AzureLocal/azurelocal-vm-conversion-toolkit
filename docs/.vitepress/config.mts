@@ -4,7 +4,7 @@ export default defineConfig({
   ignoreDeadLinks: true,
   base: '/azurelocal-vm-conversion-toolkit/',
   title: "Azure Local VM Conversion Toolkit",
-  description: "Governed centrally by HCS Platform Engineering standards",
+  description: "Internal tooling to convert Hyper-V Gen 1 VMs to Gen 2 on Azure Local (work in progress)",
   themeConfig: {
     logo: '/assets/images/azurelocal-vm-conversion-toolkit-icon.svg',
     nav: [{"link":"/","text":"Home"},{"link":"/getting-started","text":"Getting Started"},{"link":"/gen1-vs-gen2","text":"Gen 1 vs Gen 2"},{"link":"/prerequisites","text":"Prerequisites"},{"items":[{"link":"/runbook-azurelocal","text":"Azure Local Path"},{"link":"/runbook-hyperv","text":"Hyper-V Path"}],"text":"Runbooks"},{"link":"/troubleshooting","text":"Troubleshooting"},{"items":[{"link":"/reference/variables","text":"Variable Reference"}],"text":"Reference"},{"link":"/contributing","text":"Contributing"}],

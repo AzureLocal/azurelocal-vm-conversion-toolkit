@@ -64,7 +64,7 @@ Describe 'Script 05 reconnect (azurelocal)' {
         Invoke-05
         @($global:T_Az | Where-Object { $_ -match 'nic create|reconnect-to-azure ' -and $_ -notmatch '--help' }).Count | Should -Be 0
     }
-    It 'refuses when reconnect-to-azure is missing from the extension (preview not available)' {
+    It 'refuses when reconnect-to-azure is missing from the extension (extension too old)' {
         Mock az {
             $cmd = ($args | ForEach-Object { "$_" }) -join ' '
             $global:T_Az.Add($cmd); $global:LASTEXITCODE = 0
@@ -83,9 +83,9 @@ Describe 'Script 05 reconnect (azurelocal)' {
         Invoke-05 -Extra @{ WhatIf = $true }
         @($global:T_Az | Where-Object { $_ -match 'nic create|^stack-hci-vm reconnect-to-azure ' -and $_ -notmatch '--help' }).Count | Should -Be 0
     }
-    It 'carries the preview warning and the no-copy explanation' {
+    It 'carries the work-in-progress warning and the no-copy explanation' {
         $t = Get-Content (Join-Path $script:RepoRoot 'scripts\azurelocal\05-Reconnect-AzureLocalVM.ps1') -Raw
-        $t | Should -Match 'invitation-only'
+        $t | Should -Match 'WORK IN PROGRESS'
         $t | Should -Match 'unsupported operation'
     }
 }

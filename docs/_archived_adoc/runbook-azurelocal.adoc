@@ -8,7 +8,7 @@ NOTE: *This runbook covers the Azure Local VM path (scripts 01–03, 05).* The r
 
 NOTE: *This path IS workload-preserving.* The VM keeps its machine identity, domain join, installed applications, and all OS state. No Sysprep. No reinstallation. The same converted Gen 2 VM that runs in Hyper-V is reconnected into the Azure control plane using `az stack-hci-vm reconnect-to-azure`.
 
-WARNING: `az stack-hci-vm reconnect-to-azure` is currently in *Preview*. Validate this capability is available in your Azure Local version before planning production use.
+WARNING: `az stack-hci-vm reconnect-to-azure` depends on the `stack-hci-vm` extension version. Validate it is available before planning production use.
 
 WARNING: Ensure all prerequisites are satisfied before you begin. See xref:prerequisites.adoc[Prerequisites].
 
@@ -213,6 +213,6 @@ az account show --query id -o tsv
 
 * *Downtime*: Each VM has downtime from shutdown (Step 2) through Gen 2 first boot (end of Step 3) — typically 5–15 minutes plus VHDX backup time. The reconnect step (Step 4) does not require downtime.
 * *Rollback*: VHDX backups taken in Step 3 enable rollback — recreate the Gen 1 VM and attach the backup copies. See xref:troubleshooting.adoc#rolling-back-a-failed-conversion[Rolling Back a Failed Conversion]. The reconnect operation can be undone by deleting the Azure resource; the Hyper-V VM is unaffected.
-* *Preview caveat*: `reconnect-to-azure` is a preview command. Confirm it is available in your `stack-hci-vm` extension version before use. Run `az stack-hci-vm reconnect-to-azure --help` to verify.
+* *Extension requirement*: `reconnect-to-azure` must exist in your `stack-hci-vm` extension version. Run `az stack-hci-vm reconnect-to-azure --help` to verify.
 * *Arc projection*: The VM is Arc-projected by the Azure Local platform via the Arc resource bridge once reconnected. You do not install the Connected Machine agent manually.
 * *Existing Arc registration*: If script 03 already re-registered the VM with Arc as a plain Arc-enabled server, the reconnect step will reconcile that into a full `virtualMachineInstances` resource.
