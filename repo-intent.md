@@ -18,9 +18,9 @@ existing Azure Arc management registrations.
 
 ## Status
 
-Internal, private repository, work in progress (version 0.1.0, no releases or tags). The Azure Local path
+Work in progress (version 0.1.0, no releases or tags). The Azure Local path
 (script 05) needs a `stack-hci-vm` extension version that provides `reconnect-to-azure`, and it is not
-for production. Not for distribution.
+for production.
 Unit tests (Pester 5, everything mocked) run on every pull request; there is no live proof yet
 on a production cluster. Azure Migrate keeps the source generation, so this toolkit is for the
 case where the VM must become Gen 2.

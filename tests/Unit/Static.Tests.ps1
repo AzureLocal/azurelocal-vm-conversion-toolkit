@@ -67,7 +67,7 @@ Describe 'Wording' {
         $r | Should -Match '1703'
     }
     It 'README carries the internal-tool notice' {
-        (Get-Content (Join-Path $script:Root 'README.md') -Raw) | Should -Match 'Internal tool'
+        (Get-Content (Join-Path $script:Root 'README.md') -Raw) | Should -Match 'Status: work in progress'
     }
     It 'prose has no private-preview or invitation wording' {
         ($script:Texts | Where-Object { $_.Name -ne 'CHANGELOG.md' } | Select-String -Pattern 'private[ -]preview|invitation|not available for general|preview[ -]enrolled') | Should -BeNullOrEmpty

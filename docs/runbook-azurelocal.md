@@ -7,7 +7,7 @@
     **This path IS workload-preserving.** The VM keeps its machine identity, domain join, installed applications, and all OS state. No Sysprep. No reinstallation. The same converted Gen 2 VM that runs in Hyper-V is reconnected into the Azure control plane using `az stack-hci-vm reconnect-to-azure`.
 
 > [!WARNING]
-> **Internal tool, work in progress, not yet verified end to end on a live cluster.** Private repository, not for distribution. Do not use in production.
+> **Work in progress, not yet verified end to end on a live cluster.** Do not use in production.
 > Script 05 runs `az stack-hci-vm reconnect-to-azure` and needs a `stack-hci-vm` extension version that provides it (`az stack-hci-vm -h`). The Hyper-V path does not use Azure. Version 0.1.0, not released or tagged.
 >
 > **Azure Migrate keeps the source generation** (a Gen 1 source stays Gen 1), and [Gen 1 VMs have limitations in Azure Local VM management](https://learn.microsoft.com/azure/azure-local/manage/azure-arc-vm-management-overview#limitations-of-azure-local-vm-management). That is why this toolkit exists. If Gen 1 is acceptable, [Azure Migrate](https://learn.microsoft.com/azure/azure-local/migrate/migration-options-overview) (with its [Arc-reuse feature](https://learn.microsoft.com/azure/azure-local/migrate/migrate-arc-reuse)) is the tool for that.

@@ -10,7 +10,7 @@ PowerShell toolkit for converting Hyper-V Gen 1 VMs to Gen 2 on Azure Local whil
 
 ---
 
-> **Internal tool. Private repository, not for distribution.**
+> **Status: work in progress.** Not yet verified end to end on a live cluster. Do not use in production.
 >
 > **Status: work in progress, version 0.1.0, no releases or tags, not yet verified end to end on a live cluster.**
 > Script 05 runs `az stack-hci-vm reconnect-to-azure` and needs an Azure CLI `stack-hci-vm` extension version that provides it; check with `az extension show --name stack-hci-vm` and `az stack-hci-vm -h`. The Hyper-V path (scripts 01-04 under `scripts/hyperv/`) does not use Azure at all.

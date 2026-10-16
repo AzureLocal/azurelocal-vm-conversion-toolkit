@@ -19,7 +19,7 @@
     reinstallation required. The machine keeps its domain join, installed applications,
     and full OS state.
 
-    Internal tool, work in progress, not yet verified end to end on a live cluster. Do not use in
+    Work in progress, not yet verified end to end on a live cluster. Do not use in
     production. Needs a stack-hci-vm extension version that provides the reconnect operation:
     confirm with 'az stack-hci-vm reconnect-to-azure --help'.
 
@@ -157,7 +157,7 @@ Write-Host "  Azure VM Name   : $AzureVMName"
 Write-Host "  Resource Group  : $ResourceGroup"
 Write-Host "  Subscription    : $SubscriptionId"
 Write-Host ""
-Write-Host "  WORK IN PROGRESS: internal tool, not yet verified end to end on a live cluster." -ForegroundColor Yellow
+Write-Host "  WORK IN PROGRESS: not yet verified end to end on a live cluster." -ForegroundColor Yellow
 Write-Host "           Do not use in production." -ForegroundColor Yellow
 Write-Host ""
 
